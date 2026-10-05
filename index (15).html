@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="bn"><head><meta charset="utf-8">
+<title>BLAXCY Room</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;height:100%;background:#050505;color:#eee;font:13px system-ui,sans-serif;overflow:hidden}
+body{display:flex;align-items:center;justify-content:center}
+canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;display:block}
+#hud{position:fixed;left:10px;top:10px;background:#000a;padding:8px 12px;border-radius:8px;line-height:1.5;max-width:420px}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="hud"><b>BLAXCY Room</b> · 2K (2560×1440)<br><span id="st">Loading…</span><br><small>Drag: ghurao · Scroll: zoom · H: remove-mode · Shift+click: table er jaygar anchor · Z: undo</small></div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
+
+// ---- Config: ekhane tweak korte paro ----
+const CFG={
+  room:'red_room (1).glb', table:'table.glb', chair:'black_ergonomic_gaming_chair.glb', laptop:'laptop_and_mouse.glb',
+  roomHeight:2.8, tableHeight:0.75, chairHeight:1.1, laptopWidth:0.6,   // meter
+  hideTV:/(^|[^a-z])(tv|television|monitor)([^a-z]|$)|screen/i,        // TV er node name
+  hideFurniture:/dresser|cabinet|drawer|commode|sideboard|console|tv[_\s-]?(stand|unit|table)|chest/i, // TV er nicher drawer/table
+  hide:[],                       // exact node name jana thakle ekhane dao
+  yaw:{table:0,chair:0,laptop:0} // kono model ulta dekhale 180 dao (degree)
+};
+// -----------------------------------------
+const W=2560,H=1440;             // 2K
+const $=id=>document.getElementById(id), st=t=>$('st').textContent=t;
+const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z), rad=d=>d*Math.PI/180;
+const box=o=>new THREE.Box3().setFromObject(o);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(1); renderer.setSize(W,H,false);
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.1;
+document.body.appendChild(renderer.domElement);
+const cv=renderer.domElement;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x050505);
+const camera=new THREE.PerspectiveCamera(60,W/H,0.05,100);
+const controls=new OrbitControls(camera,cv); controls.enableDamping=true; controls.minDistance=0.4; controls.maxDistance=8;
+scene.add(new THREE.HemisphereLight(0xffffff,0x553333,1.1));
+const sun=new THREE.DirectionalLight(0xffffff,1.4); sun.position.set(2,4,3); scene.add(sun);
+
+const draco=new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+const gl=new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+const load=f=>gl.loadAsync(encodeURI(f)).then(g=>g.scene);
+
+// model ke real-world size e anbo, pivot = nicher majhkhane
+function wrap(o,dim,val){
+  const s=box(o).getSize(V());
+  o.scale.multiplyScalar(val/(dim==='xz'?Math.max(s.x,s.z):s[dim]));
+  o.updateMatrixWorld(true);
+  const b=box(o),c=b.getCenter(V());
+  o.position.sub(V(c.x,b.min.y,c.z));
+  const g=new THREE.Group(); g.add(o); return g;
+}
+const isVis=o=>{for(;o;o=o.parent)if(!o.visible)return false;return true};
+
+try{
+  const [roomS,tableS,chairS,laptopS]=await Promise.all([CFG.room,CFG.table,CFG.chair,CFG.laptop].map(load));
+  const room=wrap(roomS,'y',CFG.roomHeight), table=wrap(tableS,'y',CFG.tableHeight),
+        chair=wrap(chairS,'y',CFG.chairHeight), laptop=wrap(laptopS,'xz',CFG.laptopWidth);
+  scene.add(room,table,chair,laptop); room.updateMatrixWorld(true);
+
+  const stack=[], hideObj=n=>{n.visible=false;stack.push(n)};
+  const furn=[],tvs=[];
+  roomS.traverse(n=>{const nm=n.name; if(!nm)return;
+    if(CFG.hideTV.test(nm))tvs.push(n); else if(CFG.hide.includes(nm)||CFG.hideFurniture.test(nm))furn.push(n)});
+  const anchor=new THREE.Box3(); furn.forEach(n=>anchor.union(box(n)));
+  [...furn,...tvs].forEach(hideObj);
+  let msg='Ready';
+  if(anchor.isEmpty()){
+    anchor.setFromCenterAndSize(V(0,0.4,box(room).min.z+0.8),V(1,0.8,0.5));
+    msg='Auto-detect hoyni. H chepe TV/drawer e click kore remove koro, Shift+click diye table er jayga set koro';
+  }
+  console.info('Hidden nodes:',stack.map(n=>n.name||n.type));
+
+  function place(first){
+    const c=anchor.getCenter(V()), fy=anchor.min.y, rc=box(room).getCenter(V());
+    const yaw=Math.round(Math.atan2(rc.x-c.x,rc.z-c.z)/(Math.PI/2))*Math.PI/2; // room er dike mukh
+    const dir=V(Math.sin(yaw),0,Math.cos(yaw)), ax=Math.abs(dir.x)>0.5?'x':'z';
+    table.rotation.y=yaw+rad(CFG.yaw.table); table.position.set(c.x,fy,c.z); table.updateMatrixWorld(true);
+    const tb=box(table);
+    laptop.rotation.y=yaw+rad(CFG.yaw.laptop); laptop.position.set(c.x,tb.max.y,c.z);   // table er opor
+    chair.rotation.y=yaw+Math.PI+rad(CFG.yaw.chair); chair.updateMatrixWorld(true);       // laptop er dike mukh
+    const d=tb.getSize(V())[ax]/2+box(chair).getSize(V())[ax]/2-0.1;
+    chair.position.set(c.x+dir.x*d,fy,c.z+dir.z*d);
+    controls.target.set(c.x,fy+0.9,c.z);
+    if(first)camera.position.set(c.x+dir.x*2.2,fy+1.7,c.z+dir.z*2.2);
+  }
+  place(true); st(msg+' · hidden: '+(stack.map(n=>n.name||n.type).join(', ')||'none'));
+
+  // Remove-mode
+  let pick=false,d0=[0,0],au=false; const ray=new THREE.Raycaster(),m=new THREE.Vector2();
+  addEventListener('keydown',e=>{
+    if(e.key.toLowerCase()==='h'){pick=!pick;cv.style.cursor=pick?'crosshair':'';st(pick?'Remove-mode ON: click kore hide koro':'Remove-mode OFF')}
+    if(e.key.toLowerCase()==='z'&&stack.length){const o=stack.pop();o.visible=true;st('Undo: '+(o.name||o.type))}
+  });
+  cv.addEventListener('pointerdown',e=>d0=[e.clientX,e.clientY]);
+  cv.addEventListener('pointerup',e=>{
+    if(!pick||Math.hypot(e.clientX-d0[0],e.clientY-d0[1])>4)return;
+    const r=cv.getBoundingClientRect();
+    m.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(m,camera);
+    const h=ray.intersectObject(room,true).find(i=>isVis(i.object)); if(!h)return;
+    const o=h.object; hideObj(o);
+    if(e.shiftKey){if(!au){anchor.makeEmpty();au=true} anchor.union(box(o)); place(false)}
+    console.info('Hidden:',o.name||o.type); st('Hidden: '+(o.name||o.type)+' ('+stack.length+' total)');
+  });
+  renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)});
+}catch(err){console.error(err);st('Error: '+err.message)}
+</script></body></html>
