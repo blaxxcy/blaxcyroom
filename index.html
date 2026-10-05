@@ -2,17 +2,11 @@
 <html lang="bn">
 <head>
 <meta charset="utf-8">
-
 <title>BLAXCY Room</title>
-
-<meta
-  name="viewport"
-  content="width=device-width,initial-scale=1"
->
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <style>
-html,
-body{
+html,body{
   margin:0;
   height:100%;
   background:#050505;
@@ -42,7 +36,7 @@ canvas{
   padding:8px 12px;
   border-radius:8px;
   line-height:1.5;
-  max-width:460px;
+  max-width:520px;
   z-index:10;
 }
 </style>
@@ -60,39 +54,21 @@ canvas{
 <body>
 
 <div id="hud">
-  <b>BLAXCY Room</b> · 2K (2560×1440)
-  <br>
-
-  <span id="st">Loading…</span>
-
-  <br>
-
+  <b>BLAXCY Room</b> · 2K (2560×1440)<br>
+  <span id="st">Loading…</span><br>
   <small>
     Drag: ghurao · Scroll: zoom ·
-    H: remove-mode · Z: undo
+    H: remove-mode · Shift+click: table er jayga set · Z: undo
   </small>
 </div>
-
 
 <script type="module">
 
 import * as THREE from 'three';
-
-import {
-  OrbitControls
-} from 'three/addons/controls/OrbitControls.js';
-
-import {
-  GLTFLoader
-} from 'three/addons/loaders/GLTFLoader.js';
-
-import {
-  DRACOLoader
-} from 'three/addons/loaders/DRACOLoader.js';
-
-import {
-  MeshoptDecoder
-} from 'three/addons/libs/meshopt_decoder.module.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 
 
 // ============================================================
@@ -101,105 +77,104 @@ import {
 
 const CFG = {
 
-  room:
-    'red_room (1).glb',
+  room: 'red_room (1).glb',
 
-  table:
-    'table.glb',
+  table: 'table.glb',
 
-  chair:
-    'black_ergonomic_gaming_chair.glb',
+  chair: 'black_ergonomic_gaming_chair.glb',
 
-  laptop:
-    'laptop_and_mouse.glb',
+  laptop: 'laptop_and_mouse.glb',
 
 
-  // ----------------------------------------------------------
-  // Real-world approximate sizes
-  // ----------------------------------------------------------
-
-  roomHeight:
-    2.8,
-
-  tableHeight:
-    0.75,
-
-  chairHeight:
-    1.1,
-
-  laptopWidth:
-    0.6,
+  // Room height
+  roomHeight: 2.8,
 
 
-  // ----------------------------------------------------------
-  // Existing TV / monitor detection
-  // ----------------------------------------------------------
+  // Table lower than previous version
+  tableHeight: 0.68,
+
+
+  // Chair
+  chairHeight: 1.1,
+
+
+  // Laptop size
+  laptopWidth: 0.6,
+
+
+  // ========================================================
+  // ROOM OBJECTS TO HIDE
+  // ========================================================
 
   hideTV:
-    /(^|[^a-z])(tv|television|monitor)([^a-z]|$)|screen/i,
+    /(^|[^a-z])(tv|television|monitor|screen)([^a-z]|$)/i,
 
-
-  // ----------------------------------------------------------
-  // Existing furniture that should stay hidden
-  // ----------------------------------------------------------
 
   hideFurniture:
     /dresser|cabinet|drawer|commode|sideboard|console|tv[_\s-]?(stand|unit|table)|chest/i,
 
 
-  // ----------------------------------------------------------
-  // Wall decorations / framed objects
+  // Door / doorway / door-frame
+  hideDoor:
+    /door|doorway|doorframe|door_frame|door-frame|entrance/i,
+
+
+  // Wall decorations
+  hideWallDecor:
+    /painting|picture|wall[_\s-]?art|artwork|frame|poster|photo|decoration/i,
+
+
+  // Exact names can be added here if necessary
+  hide: [],
+
+
+  // ========================================================
+  // MODEL ROTATIONS
+  // ========================================================
+
+  yaw: {
+    table: 0,
+    chair: 0,
+    laptop: 180
+  },
+
+
+  // ========================================================
+  // ROOM-RELATIVE LAPTOP SETUP POSITION
   //
-  // This catches names if the GLB has useful node names.
-  // ----------------------------------------------------------
-
-  hideWallObject:
-    /picture|painting|wall[_\s-]?(art|panel|shelf|clock)|art[_\s-]?frame|wall[_\s-]?decor|decoration|poster|frame/i,
-
-
-  // Exact node names can be added here later if needed.
-  hide:[],
-
-
-  // ----------------------------------------------------------
-  // IMPORTANT
+  // x = left/right
+  // z = forward/back
   //
-  // Laptop model was facing the wrong direction.
-  // 180° fixes its orientation.
-  // ----------------------------------------------------------
+  // 0 = room center
+  // ========================================================
 
-  yaw:{
-    table:0,
-    chair:0,
-    laptop:180
-  }
+  setupOffsetX: 0,
 
+  setupOffsetZ: -0.18
 };
 
 
 // ============================================================
-// BASIC CONSTANTS
+// BASIC
 // ============================================================
 
 const W = 2560;
 const H = 1440;
 
-const $ =
-  id => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-const st =
-  text => $('st').textContent = text;
+const st = text => {
+  $('st').textContent = text;
+};
 
-const V =
-  (x=0,y=0,z=0) =>
-    new THREE.Vector3(x,y,z);
+const V = (x=0,y=0,z=0) =>
+  new THREE.Vector3(x,y,z);
 
-const rad =
-  d => d * Math.PI / 180;
+const rad = d =>
+  d * Math.PI / 180;
 
-const box =
-  object =>
-    new THREE.Box3().setFromObject(object);
+const box = obj =>
+  new THREE.Box3().setFromObject(obj);
 
 
 // ============================================================
@@ -222,15 +197,13 @@ renderer.setSize(
 renderer.toneMapping =
   THREE.ACESFilmicToneMapping;
 
-renderer.toneMappingExposure =
-  1.1;
+renderer.toneMappingExposure = 1.1;
 
 document.body.appendChild(
   renderer.domElement
 );
 
-const cv =
-  renderer.domElement;
+const cv = renderer.domElement;
 
 
 // ============================================================
@@ -251,7 +224,7 @@ scene.background =
 const camera =
   new THREE.PerspectiveCamera(
     60,
-    W / H,
+    W/H,
     0.05,
     100
   );
@@ -267,18 +240,15 @@ const controls =
     cv
   );
 
-controls.enableDamping =
-  true;
+controls.enableDamping = true;
 
-controls.minDistance =
-  0.4;
+controls.minDistance = 0.4;
 
-controls.maxDistance =
-  8;
+controls.maxDistance = 8;
 
 
 // ============================================================
-// LIGHTING
+// LIGHT
 // ============================================================
 
 scene.add(
@@ -309,80 +279,87 @@ scene.add(sun);
 // ============================================================
 
 const draco =
-  new DRACOLoader()
-    .setDecoderPath(
-      'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'
-    );
+  new DRACOLoader();
+
+draco.setDecoderPath(
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'
+);
 
 const gl =
-  new GLTFLoader()
-    .setDRACOLoader(draco)
-    .setMeshoptDecoder(
-      MeshoptDecoder
-    );
+  new GLTFLoader();
+
+gl.setDRACOLoader(draco);
+
+gl.setMeshoptDecoder(
+  MeshoptDecoder
+);
 
 
-const load =
-  file =>
-    gl
-      .loadAsync(
-        encodeURI(file)
-      )
-      .then(
-        result =>
-          result.scene
-      );
+const load = file =>
+  gl.loadAsync(
+    encodeURI(file)
+  ).then(
+    result => result.scene
+  );
 
 
 // ============================================================
 // MODEL WRAPPER
+// ============================================================
 //
-// Converts model into approximate real-world size.
-// Pivot is placed around bottom-center.
+// Model-কে real-world size এ আনা হয়।
+// Pivot নিচের মাঝখানে রাখা হয়।
 // ============================================================
 
-function wrap(
-  object,
-  dimension,
-  targetSize
-){
+function wrap(obj, dimension, value){
 
   const size =
-    box(object).getSize(
-      V()
-    );
+    box(obj).getSize(V());
 
 
-  const currentSize =
-    dimension === 'xz'
-      ? Math.max(
-          size.x,
-          size.z
-        )
-      : size[dimension];
+  let current;
+
+  if(dimension === 'xz'){
+
+    current =
+      Math.max(
+        size.x,
+        size.z
+      );
+
+  }else{
+
+    current =
+      size[dimension];
+
+  }
 
 
-  object.scale.multiplyScalar(
-    targetSize / currentSize
+  if(!current || !isFinite(current)){
+    return obj;
+  }
+
+
+  obj.scale.multiplyScalar(
+    value / current
   );
 
-  object.updateMatrixWorld(
-    true
-  );
+  obj.updateMatrixWorld(true);
 
 
-  const bounds =
-    box(object);
+  const b =
+    box(obj);
 
-  const center =
-    bounds.getCenter(V());
+  const c =
+    b.getCenter(V());
 
 
-  object.position.sub(
+  // Bottom-center pivot
+  obj.position.sub(
     V(
-      center.x,
-      bounds.min.y,
-      center.z
+      c.x,
+      b.min.y,
+      c.z
     )
   );
 
@@ -390,262 +367,31 @@ function wrap(
   const group =
     new THREE.Group();
 
-  group.add(object);
+  group.add(obj);
 
   return group;
 }
 
 
 // ============================================================
-// VISIBILITY HELPER
+// VISIBILITY CHECK
 // ============================================================
 
-const isVis =
-  object => {
+function isVisible(obj){
 
-    for(
-      let current = object;
-      current;
-      current = current.parent
-    ){
+  for(
+    let p=obj;
+    p;
+    p=p.parent
+  ){
 
-      if(!current.visible)
-        return false;
+    if(!p.visible){
+      return false;
     }
 
-    return true;
-  };
-
-
-// ============================================================
-// CHAIR MATERIAL FIX
-//
-// Keeps texture if GLB provides one.
-//
-// If texture/material is missing or white,
-// makes the chair look like a dark/black gaming chair.
-// ============================================================
-
-function fixChairMaterials(
-  chair
-){
-
-  chair.traverse(
-    object => {
-
-      if(
-        !object.isMesh ||
-        !object.material
-      ){
-
-        return;
-      }
-
-
-      const materials =
-        Array.isArray(
-          object.material
-        )
-        ? object.material
-        : [object.material];
-
-
-      materials.forEach(
-        material => {
-
-          // -----------------------------------------------
-          // Keep existing texture map.
-          // -----------------------------------------------
-
-          if(material.map){
-
-            /*
-             * The texture remains active.
-             *
-             * Dark color acts as a multiplier,
-             * producing a black/dark gaming-chair look.
-             */
-
-            material.color.set(
-              0x555555
-            );
-
-          }else{
-
-            /*
-             * If the GLB has no texture,
-             * create a clean dark chair material.
-             */
-
-            material.color.set(
-              0x15171a
-            );
-          }
-
-
-          // -----------------------------------------------
-          // Realistic chair roughness
-          // -----------------------------------------------
-
-          material.roughness =
-            Math.max(
-              material.roughness ?? 0.7,
-              0.55
-            );
-
-
-          material.metalness =
-            Math.min(
-              material.metalness ?? 0,
-              0.15
-            );
-
-
-          material.needsUpdate =
-            true;
-
-        }
-      );
-
-    }
-  );
-}
-
-
-// ============================================================
-// WALL DECOR GEOMETRY DETECTION
-//
-// Screenshot অনুযায়ী wall-এর framed object-এর নাম
-// GLB-তে অন্যরকম/unknown হলেও geometry দেখে detect করার
-// চেষ্টা করবে.
-//
-// আমরা খুব বড় wall/floor/ceiling বাদ দিচ্ছি।
-// ============================================================
-
-function looksLikeWallDecor(
-  object,
-  roomBounds
-){
-
-  if(
-    !object.isMesh ||
-    !object.geometry
-  ){
-
-    return false;
   }
 
-
-  const b =
-    new THREE.Box3()
-      .setFromObject(
-        object
-      );
-
-
-  const size =
-    b.getSize(
-      V()
-    );
-
-
-  const center =
-    b.getCenter(
-      V()
-    );
-
-
-  // ----------------------------------------------------------
-  // Ignore huge architectural surfaces
-  // ----------------------------------------------------------
-
-  if(
-    size.x > 2.5 ||
-    size.y > 2.7 ||
-    size.z > 2.5
-  ){
-
-    return false;
-  }
-
-
-  // ----------------------------------------------------------
-  // Very small objects are not useful candidates
-  // ----------------------------------------------------------
-
-  if(
-    size.x < 0.08 &&
-    size.y < 0.08 &&
-    size.z < 0.08
-  ){
-
-    return false;
-  }
-
-
-  // ----------------------------------------------------------
-  // Wall art is usually:
-  //
-  // vertical
-  // relatively flat
-  // not extremely tall
-  // ----------------------------------------------------------
-
-  const horizontal =
-    Math.max(
-      size.x,
-      size.z
-    );
-
-  const depth =
-    Math.min(
-      size.x,
-      size.z
-    );
-
-
-  const verticalRatio =
-    size.y /
-    Math.max(
-      horizontal,
-      0.001
-    );
-
-
-  const flat =
-    depth <
-    horizontal * 0.35;
-
-
-  const vertical =
-    verticalRatio > 0.8 &&
-    verticalRatio < 3.5;
-
-
-  // ----------------------------------------------------------
-  // It should be somewhere above floor level.
-  // ----------------------------------------------------------
-
-  const aboveFloor =
-    center.y >
-    roomBounds.min.y + 0.65;
-
-
-  // ----------------------------------------------------------
-  // Don't hide things very close to the ceiling.
-  // ----------------------------------------------------------
-
-  const belowCeiling =
-    center.y <
-    roomBounds.max.y - 0.25;
-
-
-  return (
-    flat &&
-    vertical &&
-    aboveFloor &&
-    belowCeiling
-  );
+  return true;
 }
 
 
@@ -656,7 +402,7 @@ function looksLikeWallDecor(
 try{
 
   // ----------------------------------------------------------
-  // Load all models
+  // LOAD ALL MODELS
   // ----------------------------------------------------------
 
   const [
@@ -664,19 +410,21 @@ try{
     tableS,
     chairS,
     laptopS
-  ] =
-    await Promise.all([
+  ] = await Promise.all([
 
-      CFG.room,
-      CFG.table,
-      CFG.chair,
-      CFG.laptop
+    CFG.room,
 
-    ].map(load));
+    CFG.table,
+
+    CFG.chair,
+
+    CFG.laptop
+
+  ].map(load));
 
 
   // ----------------------------------------------------------
-  // Wrap / resize models
+  // WRAP / SCALE
   // ----------------------------------------------------------
 
   const room =
@@ -711,10 +459,6 @@ try{
     );
 
 
-  // ----------------------------------------------------------
-  // Add to scene
-  // ----------------------------------------------------------
-
   scene.add(
     room,
     table,
@@ -723,419 +467,373 @@ try{
   );
 
 
-  room.updateMatrixWorld(
-    true
-  );
+  room.updateMatrixWorld(true);
 
 
-  // ----------------------------------------------------------
-  // Fix chair material
-  // ----------------------------------------------------------
+  // ==========================================================
+  // CHAIR MATERIAL FIX
+  // ==========================================================
 
-  fixChairMaterials(
-    chair
-  );
+  chair.traverse(node => {
+
+    if(!node.isMesh) return;
+
+    const materials =
+      Array.isArray(node.material)
+        ? node.material
+        : [node.material];
+
+
+    materials.forEach(mat => {
+
+      if(!mat) return;
+
+
+      // Existing texture থাকলে সেটা preserve
+      // কিন্তু chair খুব light হলে dark করা
+      if(mat.map){
+
+        mat.color.setHex(
+          0x777777
+        );
+
+      }else{
+
+        mat.color.setHex(
+          0x17191d
+        );
+
+      }
+
+
+      mat.roughness = 0.65;
+
+      mat.metalness = 0.05;
+
+    });
+
+  });
+
+
+  // ==========================================================
+  // HIDDEN OBJECT STACK
+  // ==========================================================
+
+  const stack = [];
+
+
+  function hideObj(obj){
+
+    if(!obj) return;
+
+    if(obj.visible){
+
+      obj.visible = false;
+
+      stack.push(obj);
+
+    }
+
+  }
 
 
   // ==========================================================
   // ROOM OBJECT DETECTION
   // ==========================================================
 
-  const stack = [];
+  const hiddenNodes = [];
 
 
-  function hideObj(
-    node
-  ){
+  roomS.traverse(node => {
+
+    const name =
+      node.name || '';
+
+
+    // --------------------------------------------------------
+    // Check own name
+    // --------------------------------------------------------
+
+    const ownNameMatch =
+
+      CFG.hide.includes(name) ||
+
+      CFG.hideTV.test(name) ||
+
+      CFG.hideFurniture.test(name) ||
+
+      CFG.hideDoor.test(name) ||
+
+      CFG.hideWallDecor.test(name);
+
+
+    // --------------------------------------------------------
+    // Check parents
+    //
+    // অনেক GLB-তে mesh-এর নাম "Floor_0" হলেও
+    // parent-এর নাম "Door" হতে পারে।
+    // --------------------------------------------------------
+
+    let parentMatch = false;
+
+    let p = node.parent;
+
+    while(p && p !== roomS){
+
+      const pn =
+        p.name || '';
+
+
+      if(
+
+        CFG.hideDoor.test(pn) ||
+
+        CFG.hideTV.test(pn) ||
+
+        CFG.hideFurniture.test(pn) ||
+
+        CFG.hideWallDecor.test(pn)
+
+      ){
+
+        parentMatch = true;
+
+        break;
+
+      }
+
+
+      p = p.parent;
+
+    }
+
 
     if(
-      !node ||
-      !node.visible
+      ownNameMatch ||
+      parentMatch
     ){
 
-      return;
+      hideObj(node);
+
+      hiddenNodes.push(
+        name || node.type
+      );
+
     }
 
-
-    node.visible =
-      false;
-
-    stack.push(
-      node
-    );
-  }
+  });
 
 
-  const furn = [];
-  const tvs = [];
-  const wallDecor = [];
+  // ==========================================================
+  // ROOM BOUNDS
+  // ==========================================================
 
+  room.updateMatrixWorld(true);
 
-  const roomBounds =
+  const roomBox =
     box(room);
 
+  const roomSize =
+    roomBox.getSize(V());
 
-  // ----------------------------------------------------------
-  // Traverse room
-  // ----------------------------------------------------------
-
-  roomS.traverse(
-    node => {
-
-      const name =
-        node.name || '';
+  const roomCenter =
+    roomBox.getCenter(V());
 
 
-      // ---------------------------------------------
-      // Named TV / screen
-      // ---------------------------------------------
-
-      if(
-        name &&
-        CFG.hideTV.test(
-          name
-        )
-      ){
-
-        tvs.push(
-          node
-        );
-
-        return;
-      }
-
-
-      // ---------------------------------------------
-      // Named furniture
-      // ---------------------------------------------
-
-      if(
-        name &&
-        (
-          CFG.hide.includes(
-            name
-          )
-          ||
-          CFG.hideFurniture.test(
-            name
-          )
-        )
-      ){
-
-        furn.push(
-          node
-        );
-
-        return;
-      }
-
-
-      // ---------------------------------------------
-      // Named wall decoration
-      // ---------------------------------------------
-
-      if(
-        name &&
-        CFG.hideWallObject.test(
-          name
-        )
-      ){
-
-        wallDecor.push(
-          node
-        );
-
-        return;
-      }
-
-
-      // ---------------------------------------------
-      // Geometry-based wall decoration
-      //
-      // This is the important part for the
-      // object visible in your screenshot.
-      // ---------------------------------------------
-
-      if(
-        looksLikeWallDecor(
-          node,
-          roomBounds
-        )
-      ){
-
-        wallDecor.push(
-          node
-        );
-      }
-
-    }
-  );
+  const floorY =
+    roomBox.min.y;
 
 
   // ==========================================================
-  // HIDE DETECTED OBJECTS
+  // LAPTOP SETUP POSITION
   // ==========================================================
-
-  [
-    ...furn,
-    ...tvs,
-    ...wallDecor
-  ]
-  .forEach(
-    hideObj
-  );
-
-
-  // ==========================================================
-  // ANCHOR
   //
-  // Table positioning uses remaining furniture / room anchor.
+  // Drawer/cabinet-এর উপর আর depend করবে না।
+  //
+  // Room-এর center থেকে fixed relative position।
   // ==========================================================
 
-  const anchor =
-    new THREE.Box3();
+  const setupX =
+    roomCenter.x +
+    roomSize.x *
+    CFG.setupOffsetX;
 
 
-  furn.forEach(
-    node => {
+  const setupZ =
+    roomCenter.z +
+    roomSize.z *
+    CFG.setupOffsetZ;
 
-      anchor.union(
-        box(node)
-      );
 
-    }
+  const setup =
+    V(
+      setupX,
+      floorY,
+      setupZ
+    );
+
+
+  // ==========================================================
+  // SETUP ORIENTATION
+  // ==========================================================
+  //
+  // Chair + laptop একই দিকে থাকবে।
+  //
+  // Table front = -Z
+  // Chair = +Z
+  // Laptop front = -Z
+  // ==========================================================
+
+  const setupYaw =
+    0;
+
+
+  const dir =
+    V(
+      Math.sin(setupYaw),
+      0,
+      Math.cos(setupYaw)
+    );
+
+
+  // ==========================================================
+  // TABLE
+  // ==========================================================
+
+  table.rotation.y =
+    setupYaw +
+    rad(CFG.yaw.table);
+
+
+  table.position.set(
+    setup.x,
+    floorY,
+    setup.z
   );
 
 
-  // ----------------------------------------------------------
-  // If furniture anchor isn't available,
-  // use a stable default.
-  // ----------------------------------------------------------
-
-  let msg =
-    'Ready';
+  table.updateMatrixWorld(true);
 
 
-  if(
-    anchor.isEmpty()
-  ){
-
-    anchor.setFromCenterAndSize(
-      V(
-        0,
-        0.4,
-        roomBounds.min.z + 0.8
-      ),
-
-      V(
-        1,
-        0.8,
-        0.5
-      )
-    );
+  // Make absolutely sure table touches floor
+  let tableBox =
+    box(table);
 
 
-    msg =
-      'Ready · auto anchor';
-  }
+  table.position.y +=
+    floorY -
+    tableBox.min.y;
+
+
+  table.updateMatrixWorld(true);
+
+
+  tableBox =
+    box(table);
 
 
   // ==========================================================
-  // PLACE TABLE + LAPTOP + CHAIR
+  // LAPTOP
+  // ==========================================================
+  //
+  // Laptop table-এর top-এর উপর বসবে।
+  // Chair থেকে laptop usable orientation।
   // ==========================================================
 
-  function place(
-    first
-  ){
-
-    const center =
-      anchor.getCenter(
-        V()
-      );
+  laptop.rotation.y =
+    setupYaw +
+    rad(CFG.yaw.laptop);
 
 
-    const floorY =
-      anchor.min.y;
+  laptop.position.set(
+    setup.x,
+    tableBox.max.y + 0.012,
+    setup.z
+  );
 
 
-    const roomCenter =
-      box(room).getCenter(
-        V()
-      );
+  laptop.updateMatrixWorld(true);
 
 
-    // --------------------------------------------------------
-    // Determine room-facing direction
-    // --------------------------------------------------------
+  // ==========================================================
+  // CHAIR
+  // ==========================================================
+  //
+  // Chair table-এর সামনে থাকবে।
+  // Chair table-এর দিকে মুখ করবে।
+  // ==========================================================
 
-    const yaw =
-      Math.round(
-        Math.atan2(
-          roomCenter.x - center.x,
-          roomCenter.z - center.z
-        )
-        /
-        (Math.PI / 2)
-      )
-      *
-      (Math.PI / 2);
+  chair.rotation.y =
+    setupYaw +
+    Math.PI +
+    rad(CFG.yaw.chair);
 
 
-    const dir =
-      V(
-        Math.sin(yaw),
-        0,
-        Math.cos(yaw)
-      );
+  chair.updateMatrixWorld(true);
 
 
-    const axis =
-      Math.abs(dir.x) > 0.5
-        ? 'x'
-        : 'z';
+  const chairSize =
+    box(chair).getSize(V());
 
 
-    // ========================================================
-    // TABLE
-    // ========================================================
-
-    table.rotation.y =
-      yaw +
-      rad(
-        CFG.yaw.table
-      );
+  const tableSize =
+    box(table).getSize(V());
 
 
-    table.position.set(
-      center.x,
-      floorY,
-      center.z
-    );
+  // Table থেকে comfortable distance
+  const chairDistance =
+    tableSize.z / 2 +
+    chairSize.z / 2 -
+    0.08;
 
 
-    table.updateMatrixWorld(
-      true
-    );
+  chair.position.set(
+    setup.x,
+    floorY,
+    setup.z +
+    chairDistance
+  );
 
 
-    const tableBox =
-      box(table);
+  chair.updateMatrixWorld(true);
 
 
-    // ========================================================
-    // LAPTOP
-    //
-    // 180° rotation fixes the upside/backwards orientation.
-    // ========================================================
-
-    laptop.rotation.y =
-      yaw +
-      rad(
-        CFG.yaw.laptop
-      );
+  // Make chair touch floor
+  let chairBox =
+    box(chair);
 
 
-    laptop.position.set(
-      center.x,
-      tableBox.max.y,
-      center.z
-    );
+  chair.position.y +=
+    floorY -
+    chairBox.min.y;
 
 
-    laptop.updateMatrixWorld(
-      true
-    );
+  chair.updateMatrixWorld(true);
 
 
-    // ========================================================
-    // CHAIR
-    // ========================================================
+  // ==========================================================
+  // CAMERA
+  // ==========================================================
 
-    chair.rotation.y =
-      yaw +
-      Math.PI +
-      rad(
-        CFG.yaw.chair
-      );
-
-
-    chair.updateMatrixWorld(
-      true
-    );
+  controls.target.set(
+    setup.x,
+    floorY + 0.9,
+    setup.z
+  );
 
 
-    const chairSize =
-      box(chair)
-        .getSize(
-          V()
-        );
+  camera.position.set(
+    setup.x + 2.6,
+    floorY + 1.8,
+    setup.z + 2.6
+  );
 
 
-    const distance =
-      tableBox
-        .getSize(
-          V()
-        )[axis] / 2
-
-      +
-
-      chairSize[axis] / 2
-
-      -
-
-      0.1;
-
-
-    chair.position.set(
-
-      center.x +
-      dir.x *
-      distance,
-
-      floorY,
-
-      center.z +
-      dir.z *
-      distance
-
-    );
-
-
-    // --------------------------------------------------------
-    // Camera target
-    // --------------------------------------------------------
-
-    controls.target.set(
-      center.x,
-      floorY + 0.9,
-      center.z
-    );
-
-
-    // --------------------------------------------------------
-    // Initial camera
-    // --------------------------------------------------------
-
-    if(first){
-
-      camera.position.set(
-
-        center.x +
-        dir.x * 2.2,
-
-        floorY + 1.7,
-
-        center.z +
-        dir.z * 2.2
-
-      );
-
-    }
-
-  }
-
-
-  place(true);
+  camera.lookAt(
+    setup.x,
+    floorY + 0.9,
+    setup.z
+  );
 
 
   // ==========================================================
@@ -1143,15 +841,26 @@ try{
   // ==========================================================
 
   st(
-    msg +
-    ' · hidden: ' +
-    stack
-      .map(
-        node =>
-          node.name ||
-          node.type
-      )
-      .join(', ')
+    'Ready · setup fixed inside room · hidden: ' +
+    hiddenNodes.length
+  );
+
+
+  console.info(
+    'Hidden room nodes:',
+    hiddenNodes
+  );
+
+
+  console.info(
+    'Room bounds:',
+    roomBox
+  );
+
+
+  console.info(
+    'Setup position:',
+    setup
   );
 
 
@@ -1159,13 +868,13 @@ try{
   // REMOVE MODE
   // ==========================================================
 
-  let pick =
-    false;
+  let pick = false;
 
-  let mouseDown =
+  let pointerDown =
     [0,0];
 
-  let anchorUpdated =
+
+  let manualAnchor =
     false;
 
 
@@ -1178,23 +887,21 @@ try{
 
 
   // ----------------------------------------------------------
-  // Keyboard
+  // KEYBOARD
   // ----------------------------------------------------------
 
   addEventListener(
     'keydown',
     event => {
 
-      // H = remove mode
+      const key =
+        event.key.toLowerCase();
 
-      if(
-        event.key.toLowerCase()
-        ===
-        'h'
-      ){
 
-        pick =
-          !pick;
+      // H = Remove mode
+      if(key === 'h'){
+
+        pick = !pick;
 
 
         cv.style.cursor =
@@ -1205,36 +912,31 @@ try{
 
         st(
           pick
-            ? 'Remove-mode ON · object click kore hide koro'
+            ? 'Remove-mode ON: click kore object hide koro'
             : 'Remove-mode OFF'
         );
 
       }
 
 
-      // Z = undo
-
+      // Z = Undo
       if(
-        event.key.toLowerCase()
-        ===
-        'z'
-        &&
+        key === 'z' &&
         stack.length
       ){
 
-        const object =
+        const obj =
           stack.pop();
 
 
-        object.visible =
-          true;
+        obj.visible = true;
 
 
         st(
           'Undo: ' +
           (
-            object.name ||
-            object.type
+            obj.name ||
+            obj.type
           )
         );
 
@@ -1245,54 +947,45 @@ try{
 
 
   // ==========================================================
-  // MOUSE DOWN
+  // POINTER DOWN
   // ==========================================================
 
   cv.addEventListener(
     'pointerdown',
     event => {
 
-      mouseDown =
-        [
-          event.clientX,
-          event.clientY
-        ];
+      pointerDown = [
+        event.clientX,
+        event.clientY
+      ];
 
     }
   );
 
 
   // ==========================================================
-  // MOUSE UP
+  // POINTER UP
   // ==========================================================
 
   cv.addEventListener(
     'pointerup',
     event => {
 
-      if(
-        !pick
-      ){
-
-        return;
-      }
+      if(!pick) return;
 
 
-      // Ignore camera drag
-      if(
+      const movement =
         Math.hypot(
           event.clientX -
-          mouseDown[0],
+          pointerDown[0],
 
           event.clientY -
-          mouseDown[1]
-        )
-        >
-        4
-      ){
+          pointerDown[1]
+        );
 
-        return;
-      }
+
+      // Orbit drag হলে remove করবে না
+      if(movement > 4) return;
 
 
       const rect =
@@ -1302,28 +995,18 @@ try{
       mouse.set(
 
         (
-          event.clientX -
-          rect.left
-        )
-        /
-        rect.width
-        *
-        2
-        -
-        1,
+          (event.clientX -
+          rect.left) /
+          rect.width
+        ) * 2 - 1,
 
         -(
           (
             event.clientY -
             rect.top
-          )
-          /
+          ) /
           rect.height
-        )
-        *
-        2
-        +
-        1
+        ) * 2 + 1
 
       );
 
@@ -1335,77 +1018,137 @@ try{
 
 
       const hits =
-        ray
-          .intersectObject(
-            room,
-            true
-          )
-          .filter(
-            hit =>
-              isVis(
-                hit.object
-              )
-          );
+        ray.intersectObject(
+          room,
+          true
+        );
 
 
-      if(
-        !hits.length
-      ){
-
-        return;
-      }
-
-
-      const selected =
-        hits[0].object;
+      const hit =
+        hits.find(
+          item =>
+            isVisible(
+              item.object
+            )
+        );
 
 
-      hideObj(
-        selected
-      );
+      if(!hit) return;
+
+
+      const object =
+        hit.object;
+
+
+      // Hide clicked mesh
+      hideObj(object);
 
 
       // ------------------------------------------------------
-      // Shift + click:
-      // update table anchor
+      // Shift + click
+      // নতুন table position anchor হিসেবে clicked location
       // ------------------------------------------------------
 
-      if(
-        event.shiftKey
-      ){
+      if(event.shiftKey){
 
-        if(
-          !anchorUpdated
-        ){
+        if(!manualAnchor){
 
-          anchor.makeEmpty();
-
-          anchorUpdated =
-            true;
+          manualAnchor = true;
 
         }
 
 
-        anchor.union(
-          box(selected)
+        const hitPoint =
+          hit.point;
+
+
+        table.position.x =
+          hitPoint.x;
+
+
+        table.position.z =
+          hitPoint.z;
+
+
+        table.position.y =
+          floorY;
+
+
+        table.updateMatrixWorld(
+          true
         );
 
 
-        place(false);
+        const newTableBox =
+          box(table);
+
+
+        laptop.position.set(
+          hitPoint.x,
+          newTableBox.max.y + 0.012,
+          hitPoint.z
+        );
+
+
+        laptop.updateMatrixWorld(
+          true
+        );
+
+
+        const tSize =
+          newTableBox.getSize(V());
+
+
+        const cSize =
+          box(chair).getSize(V());
+
+
+        const d =
+          tSize.z / 2 +
+          cSize.z / 2 -
+          0.08;
+
+
+        chair.position.set(
+          hitPoint.x,
+          floorY,
+          hitPoint.z + d
+        );
+
+
+        chair.updateMatrixWorld(
+          true
+        );
+
+
+        st(
+          'Setup moved · ' +
+          (
+            object.name ||
+            object.type
+          )
+        );
+
+      }else{
+
+        st(
+          'Hidden: ' +
+          (
+            object.name ||
+            object.type
+          ) +
+          ' · ' +
+          stack.length +
+          ' total'
+        );
 
       }
 
 
-      st(
-        'Hidden: ' +
-        (
-          selected.name ||
-          selected.type
-        )
-        +
-        ' (' +
-        stack.length +
-        ' total)'
+      console.info(
+        'Hidden:',
+        object.name ||
+        object.type
       );
 
     }
@@ -1413,7 +1156,7 @@ try{
 
 
   // ==========================================================
-  // RENDER LOOP
+  // ANIMATION LOOP
   // ==========================================================
 
   renderer.setAnimationLoop(
@@ -1430,10 +1173,10 @@ try{
   );
 
 
-}
-catch(error){
+}catch(error){
 
   console.error(
+    'BLAXCY Room Error:',
     error
   );
 
