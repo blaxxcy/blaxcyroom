@@ -10,7 +10,7 @@ canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;display:b
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head><body>
-<div id="hud"><b>BLAXCY Room</b> · 2K (2560×1440)<br><span id="st">Loading…</span><br><small>Drag: ghurao · Scroll: zoom · H: remove-mode · Shift+click: table er jaygar anchor · Z: undo</small></div>
+<div id="hud"><b>BLAXCY Room</b> · <span id="res"></span><br><span id="st">Loading…</span><br><small>Drag: ghurao · Scroll: zoom · H: remove-mode · Z: undo · URL er pore ?4k dile 4K</small></div>
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -29,15 +29,16 @@ const CFG={
   roomHeight:2.8, tableHeight:0.75, chairHeight:1.1, laptopWidth:0.6,   // meter
   hideTV:/(^|[^a-z])(tv|television|monitor)([^a-z]|$)|screen/i,
   hideFurniture:/dresser|cabinet|drawer|commode|sideboard|console|tv[_\s-]?(stand|unit|table)|chest/i,
-  hide:[],
+  hide:[], cullMargin:0.2,         // dresser er charidike koto beshi jaygar mesh remove hobe (meter)
   yaw:{table:0,chair:0,laptop:0},  // model ulta dekhale 180
-  laptopForward:0.3,               // laptop table er samne dike koto ashbe (max, meter)
-  chairTuck:0.2,                   // chair table er niche koto dhukbe (meter)
-  bloom:0.5, exposure:0.85
+  laptopForward:0.3, chairTuck:0.2,
+  exposure:0.8, bloom:0.25,
+  light:{ceiling:10, wall:3.5, desk:2}   // alo beshi/kom korte ei maan bodlao
 };
 // ----------------
-const W=2560,H=1440;
+const [W,H]=location.search.includes('4k')?[3840,2160]:[2560,1440];
 const $=id=>document.getElementById(id), st=t=>$('st').textContent=t;
+$('res').textContent=(W>3000?'4K':'2K')+' ('+W+'×'+H+')';
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z), rad=d=>d*Math.PI/180;
 const box=o=>new THREE.Box3().setFromObject(o);
 
@@ -51,15 +52,16 @@ scene.environment=new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironme
 const camera=new THREE.PerspectiveCamera(60,W/H,0.05,100);
 const controls=new OrbitControls(camera,cv); controls.enableDamping=true; controls.minDistance=0.4; controls.maxDistance=8;
 
-// Sketchfab er moto moody light: halka purple ambient + lal ceiling glow + safed wall glow
-scene.add(new THREE.HemisphereLight(0x9a8cff,0x4a1f2a,0.45));
-const L1=new THREE.PointLight(0xff4a3d,30,8,2), L2=new THREE.PointLight(0xe8e6ff,18,5,2), L3=new THREE.PointLight(0xffd9c0,6,2.5,2);
+// Balanced light: soft ambient + halka key + warm ceiling glow + wall wash + desk light
+scene.add(new THREE.HemisphereLight(0xb8b4ff,0x3a2228,0.3));
+const key=new THREE.DirectionalLight(0xfff1e6,0.55); key.position.set(2,4,3); scene.add(key);
+const L1=new THREE.PointLight(0xff6a50,CFG.light.ceiling,9,2), L2=new THREE.PointLight(0xffe2d0,CFG.light.wall,5,2), L3=new THREE.PointLight(0xffd9c0,CFG.light.desk,3,2);
 scene.add(L1,L2,L3);
 
 const composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(W,H,{type:THREE.HalfFloatType,samples:4}));
 composer.setPixelRatio(1); composer.setSize(W,H);
 composer.addPass(new RenderPass(scene,camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(W,H),CFG.bloom,0.6,0.9));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W,H),CFG.bloom,0.4,1.0));
 composer.addPass(new OutputPass());
 
 const draco=new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
@@ -79,12 +81,34 @@ function wrap(o,dim,val){
   const g=new THREE.Group(); g.add(o); return g;
 }
 const isVis=o=>{for(;o;o=o.parent)if(!o.visible)return false;return true};
-// lamba dik ta X e ana (na hole -90 deg)
 const al=g=>{g.rotation.y=0;g.updateMatrixWorld(true);const s=box(g).getSize(V());return s.z>s.x*1.05?-Math.PI/2:0};
+
+// region er vitorer triangle gulo mushe dei (merged mesh hole-o kaj kore). Wall e hole na hoy tai back-plane e thaka wall rakhi.
+function cull(root,reg,dir,backP){
+  let n=0; const a=V(),b=V(),c=V(),ct=V(),nm=V(),e1=V(),e2=V();
+  root.traverse(o=>{
+    if(!o.isMesh||o.isSkinnedMesh||!isVis(o))return;
+    const g=o.geometry,p=g.attributes.position; if(!p)return;
+    const old=g.index?g.index.array:null, cnt=old?old.length:p.count, keep=[]; let del0=0;
+    for(let i=0;i<cnt;i+=3){
+      const i0=old?old[i]:i,i1=old?old[i+1]:i+1,i2=old?old[i+2]:i+2;
+      a.fromBufferAttribute(p,i0).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(p,i1).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(p,i2).applyMatrix4(o.matrixWorld);
+      ct.copy(a).add(b).add(c).multiplyScalar(1/3);
+      let del=reg.containsPoint(ct);
+      if(del){nm.crossVectors(e1.subVectors(b,a),e2.subVectors(c,a)).normalize();
+        if(Math.abs(nm.dot(dir))>0.9&&Math.abs(ct.dot(dir)-backP)<0.08)del=false}
+      if(del)del0++; else keep.push(i0,i1,i2);
+    }
+    if(del0){const g2=g.clone(); g2.setIndex(keep); o.geometry=g2; n+=del0}
+  });
+  return n;
+}
 
 try{
   const [roomS,tableS,chairS,laptopS]=await Promise.all([CFG.room,CFG.table,CFG.chair,CFG.laptop].map(load));
-  tune(roomS,0.2); tune(tableS,0.7); tune(chairS,0.9,true); tune(laptopS,0.7);
+  tune(roomS,0.15); tune(tableS,0.6); tune(chairS,0.8,true); tune(laptopS,0.6);
   const room=wrap(roomS,'y',CFG.roomHeight), table=wrap(tableS,'y',CFG.tableHeight),
         chair=wrap(chairS,'y',CFG.chairHeight), laptop=wrap(laptopS,'xz',CFG.laptopWidth);
   scene.add(room,table,chair,laptop); room.updateMatrixWorld(true);
@@ -96,38 +120,42 @@ try{
     if(CFG.hideTV.test(nm))tvs.push(n); else if(CFG.hide.includes(nm)||CFG.hideFurniture.test(nm))furn.push(n)});
   const anchor=new THREE.Box3(); furn.forEach(n=>anchor.union(box(n)));
   [...furn,...tvs].forEach(hideObj);
+
+  const facing=()=>{const c=anchor.getCenter(V()),rc=box(room).getCenter(V());
+    const yaw=Math.round(Math.atan2(rc.x-c.x,rc.z-c.z)/(Math.PI/2))*Math.PI/2, dir=V(Math.sin(yaw),0,Math.cos(yaw));
+    return {c,rc,yaw,dir,ax:Math.abs(dir.x)>0.5?'x':'z'}};
+
   let msg='Ready';
   if(anchor.isEmpty()){
     anchor.setFromCenterAndSize(V(0,0.4,box(room).min.z+0.8),V(1,0.8,0.5));
     msg='Auto-detect hoyni. H chepe click kore remove koro';
-  }else{ // dresser er baki body (naam na mille-o) remove
-    const ae=anchor.clone().expandByScalar(0.1), sz=anchor.getSize(V());
-    roomS.traverse(n=>{if(!n.isMesh||!isVis(n))return; const b=box(n),s=b.getSize(V());
-      if(ae.containsPoint(b.getCenter(V()))&&s.x<=sz.x*1.7+0.2&&s.y<=sz.y*1.7+0.2&&s.z<=sz.z*1.7+0.2)hideObj(n)});
+  }else{
+    const f=facing(), reg=anchor.clone(); reg.min.addScalar(-CFG.cullMargin); reg.max.addScalar(CFG.cullMargin);
+    reg.min.y=0.05; reg.max.y=anchor.max.y+0.1;
+    const n=cull(room,reg,f.dir,Math.min(anchor.min.dot(f.dir),anchor.max.dot(f.dir)));
+    msg='Ready · dresser er '+n+' triangle remove';
   }
   console.info('Hidden nodes:',stack.map(n=>n.name||n.type));
 
   function place(first){
-    const c=anchor.getCenter(V()), fy=0, rc=box(room).getCenter(V());
-    const yaw=Math.round(Math.atan2(rc.x-c.x,rc.z-c.z)/(Math.PI/2))*Math.PI/2; // room er dike mukh
-    const dir=V(Math.sin(yaw),0,Math.cos(yaw)), ax=Math.abs(dir.x)>0.5?'x':'z';
+    const {c,rc,yaw,dir,ax}=facing(), fy=0;
     table.rotation.y=yaw+A.table+rad(CFG.yaw.table); table.position.set(c.x,fy,c.z); table.updateMatrixWorld(true);
     const tb=box(table), depth=tb.getSize(V())[ax];
-    laptop.rotation.y=yaw+A.laptop+rad(CFG.yaw.laptop); laptop.updateMatrixWorld(true);   // shoja
+    laptop.rotation.y=yaw+A.laptop+rad(CFG.yaw.laptop); laptop.updateMatrixWorld(true);
     const off=Math.max(0,Math.min(CFG.laptopForward,depth/2-box(laptop).getSize(V())[ax]/2-0.1));
     laptop.position.set(c.x+dir.x*off,tb.max.y,c.z+dir.z*off);
     chair.rotation.y=yaw+Math.PI+rad(CFG.yaw.chair); chair.updateMatrixWorld(true);
     const d=depth/2+box(chair).getSize(V())[ax]/2-CFG.chairTuck;
     chair.position.set(c.x+dir.x*d,fy,c.z+dir.z*d);
     L1.position.set(rc.x,CFG.roomHeight-0.4,rc.z);
-    L2.position.set(c.x+dir.x*0.7,1.8,c.z+dir.z*0.7);
+    L2.position.set(c.x+dir.x*1.0,1.9,c.z+dir.z*1.0);
     L3.position.set(c.x+dir.x*0.3,tb.max.y+0.8,c.z+dir.z*0.3);
     controls.target.set(c.x,0.9,c.z);
-    if(first)camera.position.set(c.x+dir.x*2.2,1.7,c.z+dir.z*2.2);
+    if(first)camera.position.set(c.x+dir.x*2.4,1.6,c.z+dir.z*2.4);
   }
   place(true); st(msg+' · hidden: '+(stack.map(n=>n.name||n.type).join(', ')||'none'));
 
-  let pick=false,d0=[0,0],au=false; const ray=new THREE.Raycaster(),m=new THREE.Vector2();
+  let pick=false,d0=[0,0]; const ray=new THREE.Raycaster(),m=new THREE.Vector2();
   addEventListener('keydown',e=>{
     if(e.key.toLowerCase()==='h'){pick=!pick;cv.style.cursor=pick?'crosshair':'';st(pick?'Remove-mode ON: click kore hide koro':'Remove-mode OFF')}
     if(e.key.toLowerCase()==='z'&&stack.length){const o=stack.pop();o.visible=true;st('Undo: '+(o.name||o.type))}
@@ -139,7 +167,6 @@ try{
     m.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(m,camera);
     const h=ray.intersectObject(room,true).find(i=>isVis(i.object)); if(!h)return;
     const o=h.object; hideObj(o);
-    if(e.shiftKey){if(!au){anchor.makeEmpty();au=true} anchor.union(box(o)); place(false)}
     console.info('Hidden:',o.name||o.type); st('Hidden: '+(o.name||o.type)+' ('+stack.length+' total)');
   });
   renderer.setAnimationLoop(()=>{controls.update();composer.render()});
