@@ -32,11 +32,11 @@ canvas{
   position:fixed;
   left:10px;
   top:10px;
-  background:#000a;
+  background:#000b;
   padding:8px 12px;
   border-radius:8px;
   line-height:1.5;
-  max-width:560px;
+  max-width:620px;
   z-index:20;
 }
 </style>
@@ -65,10 +65,22 @@ canvas{
 <script type="module">
 
 import * as THREE from 'three';
-import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
-import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
+
+import {
+  OrbitControls
+} from 'three/addons/controls/OrbitControls.js';
+
+import {
+  GLTFLoader
+} from 'three/addons/loaders/GLTFLoader.js';
+
+import {
+  DRACOLoader
+} from 'three/addons/loaders/DRACOLoader.js';
+
+import {
+  MeshoptDecoder
+} from 'three/addons/libs/meshopt_decoder.module.js';
 
 
 // ============================================================
@@ -77,30 +89,38 @@ import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 
 const CFG = {
 
-  room: 'red_room (1).glb',
+  room:
+    'red_room (1).glb',
 
-  table: 'table.glb',
+  table:
+    'table.glb',
 
-  chair: 'black_ergonomic_gaming_chair.glb',
+  chair:
+    'black_ergonomic_gaming_chair.glb',
 
-  laptop: 'laptop_and_mouse.glb',
-
-
-  // ----------------------------------------------------------
-  // SIZE
-  // ----------------------------------------------------------
-
-  roomHeight: 2.8,
-
-  tableHeight: 0.68,
-
-  chairHeight: 1.1,
-
-  laptopWidth: 0.6,
+  laptop:
+    'laptop_and_mouse.glb',
 
 
   // ----------------------------------------------------------
-  // OBJECTS TO REMOVE
+  // MODEL SIZES
+  // ----------------------------------------------------------
+
+  roomHeight:
+    2.8,
+
+  tableHeight:
+    0.68,
+
+  chairHeight:
+    1.1,
+
+  laptopWidth:
+    0.6,
+
+
+  // ----------------------------------------------------------
+  // OBJECT DETECTION
   // ----------------------------------------------------------
 
   hideTV:
@@ -123,31 +143,25 @@ const CFG = {
 
 
   // ----------------------------------------------------------
-  // MODEL ROTATION
+  // DISTANCE / PLACEMENT
   // ----------------------------------------------------------
 
-  tableYaw: 0,
+  wallGap:
+    0.10,
 
-  chairYaw: 0,
-
-  /*
-    IMPORTANT:
-
-    Laptop model-er nijer default orientation
-    ulta/sideways thakte pare.
-
-    90 degree = table-er sathe straight.
-  */
-  laptopYaw: 90,
+  chairGap:
+    0.12,
 
 
   // ----------------------------------------------------------
-  // SETUP POSITION
+  // CAMERA
   // ----------------------------------------------------------
 
-  setupOffsetX: 0,
+  cameraDistance:
+    2.5,
 
-  setupOffsetZ: -0.18
+  cameraHeight:
+    1.7
 };
 
 
@@ -158,20 +172,21 @@ const CFG = {
 const W = 2560;
 const H = 1440;
 
-const $ = id =>
-  document.getElementById(id);
+const $ =
+  id =>
+    document.getElementById(id);
 
-const st = text =>
-  $('st').textContent = text;
+const status =
+  text =>
+    $('st').textContent = text;
 
-const V = (x=0,y=0,z=0) =>
-  new THREE.Vector3(x,y,z);
+const V =
+  (x=0,y=0,z=0) =>
+    new THREE.Vector3(x,y,z);
 
-const rad = degrees =>
-  degrees * Math.PI / 180;
-
-const box = object =>
-  new THREE.Box3().setFromObject(object);
+const box =
+  object =>
+    new THREE.Box3().setFromObject(object);
 
 
 // ============================================================
@@ -201,7 +216,7 @@ document.body.appendChild(
   renderer.domElement
 );
 
-const cv =
+const canvas =
   renderer.domElement;
 
 
@@ -213,7 +228,9 @@ const scene =
   new THREE.Scene();
 
 scene.background =
-  new THREE.Color(0x050505);
+  new THREE.Color(
+    0x050505
+  );
 
 
 // ============================================================
@@ -236,14 +253,17 @@ const camera =
 const controls =
   new OrbitControls(
     camera,
-    cv
+    canvas
   );
 
-controls.enableDamping = true;
+controls.enableDamping =
+  true;
 
-controls.minDistance = 0.4;
+controls.minDistance =
+  0.4;
 
-controls.maxDistance = 8;
+controls.maxDistance =
+  8;
 
 
 // ============================================================
@@ -274,7 +294,7 @@ scene.add(sun);
 
 
 // ============================================================
-// GLTF
+// GLTF LOADER
 // ============================================================
 
 const draco =
@@ -284,23 +304,29 @@ draco.setDecoderPath(
   'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'
 );
 
-const gl =
+const loader =
   new GLTFLoader();
 
-gl.setDRACOLoader(draco);
+loader.setDRACOLoader(
+  draco
+);
 
-gl.setMeshoptDecoder(
+loader.setMeshoptDecoder(
   MeshoptDecoder
 );
 
 
-const load =
-  file =>
-    gl.loadAsync(
+async function load(
+  file
+){
+
+  const result =
+    await loader.loadAsync(
       encodeURI(file)
-    ).then(
-      result => result.scene
     );
+
+  return result.scene;
+}
 
 
 // ============================================================
@@ -310,19 +336,23 @@ const load =
 function wrap(
   object,
   dimension,
-  targetSize
+  target
 ){
 
   const size =
-    box(object).getSize(V());
+    box(object).getSize(
+      V()
+    );
 
 
-  let currentSize;
+  let current;
 
 
-  if(dimension === 'xz'){
+  if(
+    dimension === 'xz'
+  ){
 
-    currentSize =
+    current =
       Math.max(
         size.x,
         size.z
@@ -330,15 +360,15 @@ function wrap(
 
   }else{
 
-    currentSize =
+    current =
       size[dimension];
 
   }
 
 
   if(
-    !currentSize ||
-    !isFinite(currentSize)
+    !current ||
+    !isFinite(current)
   ){
 
     return object;
@@ -347,28 +377,28 @@ function wrap(
 
 
   object.scale.multiplyScalar(
-    targetSize / currentSize
+    target / current
   );
 
-  object.updateMatrixWorld(true);
+
+  object.updateMatrixWorld(
+    true
+  );
 
 
   const b =
     box(object);
 
-  const c =
+  const center =
     b.getCenter(V());
 
 
-  /*
-    Pivot = bottom center
-  */
-
+  // Bottom-center pivot
   object.position.sub(
     V(
-      c.x,
+      center.x,
       b.min.y,
-      c.z
+      center.z
     )
   );
 
@@ -386,23 +416,74 @@ function wrap(
 // VISIBILITY
 // ============================================================
 
-function isVisible(object){
+function isVisible(
+  object
+){
 
   for(
-    let p=object;
+    let p = object;
     p;
-    p=p.parent
+    p = p.parent
   ){
 
-    if(!p.visible){
-
+    if(!p.visible)
       return false;
-
-    }
 
   }
 
   return true;
+}
+
+
+// ============================================================
+// FIND TOP-LEVEL ROOT
+// ============================================================
+
+function topRoomChild(
+  node,
+  roomS
+){
+
+  let current =
+    node;
+
+
+  while(
+    current.parent &&
+    current.parent !== roomS
+  ){
+
+    current =
+      current.parent;
+
+  }
+
+
+  return current;
+}
+
+
+// ============================================================
+// GET CENTER / SIZE
+// ============================================================
+
+function getInfo(
+  object
+){
+
+  const b =
+    box(object);
+
+  return {
+
+    box:b,
+
+    center:b.getCenter(V()),
+
+    size:b.getSize(V())
+
+  };
+
 }
 
 
@@ -413,7 +494,7 @@ function isVisible(object){
 try{
 
   // ==========================================================
-  // LOAD
+  // LOAD MODELS
   // ==========================================================
 
   const [
@@ -479,7 +560,9 @@ try{
   );
 
 
-  room.updateMatrixWorld(true);
+  room.updateMatrixWorld(
+    true
+  );
 
 
   // ==========================================================
@@ -535,13 +618,32 @@ try{
 
 
   // ==========================================================
-  // HIDDEN OBJECT STACK
+  // ROOM BOUNDS
   // ==========================================================
 
-  const stack = [];
+  const roomBox =
+    box(room);
+
+  const roomSize =
+    roomBox.getSize(V());
+
+  const roomCenter =
+    roomBox.getCenter(V());
+
+  const floorY =
+    roomBox.min.y;
 
 
-  function hideObj(object){
+  // ==========================================================
+  // HIDE STACK
+  // ==========================================================
+
+  const hiddenStack = [];
+
+
+  function hideObject(
+    object
+  ){
 
     if(!object)
       return;
@@ -549,9 +651,12 @@ try{
 
     if(object.visible){
 
-      object.visible = false;
+      object.visible =
+        false;
 
-      stack.push(object);
+      hiddenStack.push(
+        object
+      );
 
     }
 
@@ -559,10 +664,23 @@ try{
 
 
   // ==========================================================
-  // REMOVE UNWANTED ROOM FURNITURE
+  // FIND FURNITURE ROOTS
   // ==========================================================
 
-  const hiddenNames = [];
+  const furnitureRoots =
+    new Map();
+
+
+  const doorRoots =
+    new Map();
+
+
+  const tvRoots =
+    new Map();
+
+
+  const decorRoots =
+    new Map();
 
 
   roomS.traverse(
@@ -572,71 +690,80 @@ try{
         node.name || '';
 
 
-      // ------------------------------------------------------
-      // Own name
-      // ------------------------------------------------------
-
-      let match =
-
-        CFG.hide.includes(name) ||
-
-        CFG.hideTV.test(name) ||
-
-        CFG.hideFurniture.test(name) ||
-
-        CFG.hideDoor.test(name) ||
-
-        CFG.hideWallDecor.test(name);
+      const root =
+        topRoomChild(
+          node,
+          roomS
+        );
 
 
       // ------------------------------------------------------
-      // Parent names
+      // Furniture
       // ------------------------------------------------------
 
-      let parent =
-        node.parent;
-
-
-      while(
-        parent &&
-        parent !== roomS
+      if(
+        CFG.hideFurniture.test(
+          name
+        )
       ){
 
-        const parentName =
-          parent.name || '';
-
-
-        if(
-
-          CFG.hideTV.test(parentName) ||
-
-          CFG.hideFurniture.test(parentName) ||
-
-          CFG.hideDoor.test(parentName) ||
-
-          CFG.hideWallDecor.test(parentName)
-
-        ){
-
-          match = true;
-
-          break;
-
-        }
-
-
-        parent =
-          parent.parent;
+        furnitureRoots.set(
+          root.uuid,
+          root
+        );
 
       }
 
 
-      if(match){
+      // ------------------------------------------------------
+      // Doors
+      // ------------------------------------------------------
 
-        hideObj(node);
+      if(
+        CFG.hideDoor.test(
+          name
+        )
+      ){
 
-        hiddenNames.push(
-          name || node.type
+        doorRoots.set(
+          root.uuid,
+          root
+        );
+
+      }
+
+
+      // ------------------------------------------------------
+      // TV
+      // ------------------------------------------------------
+
+      if(
+        CFG.hideTV.test(
+          name
+        )
+      ){
+
+        tvRoots.set(
+          root.uuid,
+          root
+        );
+
+      }
+
+
+      // ------------------------------------------------------
+      // Wall decoration
+      // ------------------------------------------------------
+
+      if(
+        CFG.hideWallDecor.test(
+          name
+        )
+      ){
+
+        decorRoots.set(
+          root.uuid,
+          root
         );
 
       }
@@ -646,67 +773,477 @@ try{
 
 
   // ==========================================================
-  // ROOM BOUNDS
+  // FURNITURE CANDIDATES
   // ==========================================================
 
-  room.updateMatrixWorld(true);
+  const candidates = [];
 
 
-  const roomBox =
-    box(room);
+  for(
+    const root of furnitureRoots.values()
+  ){
 
-
-  const roomSize =
-    roomBox.getSize(V());
-
-
-  const roomCenter =
-    roomBox.getCenter(V());
-
-
-  const floorY =
-    roomBox.min.y;
-
-
-  // ==========================================================
-  // SETUP POSITION
-  // ==========================================================
-
-  const setup =
-    V(
-
-      roomCenter.x +
-      roomSize.x *
-      CFG.setupOffsetX,
-
-      floorY,
-
-      roomCenter.z +
-      roomSize.z *
-      CFG.setupOffsetZ
-
+    root.updateMatrixWorld(
+      true
     );
 
 
-  /*
-    Setup direction.
+    const info =
+      getInfo(root);
 
-    Table faces -Z.
-    Chair faces -Z.
-    Laptop keyboard faces -Z.
+
+    const s =
+      info.size;
+
+
+    /*
+      Drawer / cabinet / console সাধারণত:
+
+      - খুব বেশি লম্বা vertical object নয়
+      - floor-এর কাছে থাকে
+      - wall-এর কাছে থাকে
+      - width > depth
+    */
+
+
+    const width =
+      Math.max(
+        s.x,
+        s.z
+      );
+
+
+    const depth =
+      Math.min(
+        s.x,
+        s.z
+      );
+
+
+    const height =
+      s.y;
+
+
+    const bottomDistance =
+      Math.abs(
+        info.box.min.y -
+        floorY
+      );
+
+
+    const nearFloor =
+      bottomDistance <
+      roomSize.y * 0.30;
+
+
+    const shallow =
+      depth <
+      roomSize.x * 0.45;
+
+
+    const reasonableHeight =
+      height <
+      roomSize.y * 0.65;
+
+
+    const reasonableWidth =
+      width >
+      roomSize.x * 0.15;
+
+
+    let score = 0;
+
+
+    if(nearFloor)
+      score += 30;
+
+
+    if(shallow)
+      score += 25;
+
+
+    if(reasonableHeight)
+      score += 20;
+
+
+    if(reasonableWidth)
+      score += 20;
+
+
+    // Prefer furniture with explicit drawer/console name
+    let named = false;
+
+
+    root.traverse(
+      n => {
+
+        const nName =
+          n.name || '';
+
+
+        if(
+          /drawer|dresser|cabinet|console|sideboard|commode/i.test(
+            nName
+          )
+        ){
+
+          named = true;
+
+        }
+
+      }
+    );
+
+
+    if(named)
+      score += 80;
+
+
+    candidates.push({
+
+      root,
+
+      info,
+
+      score
+
+    });
+
+  }
+
+
+  // ==========================================================
+  // SELECT BEST DRAWER / CONSOLE
+  // ==========================================================
+
+  candidates.sort(
+    (a,b) =>
+      b.score -
+      a.score
+  );
+
+
+  let targetFurniture =
+    candidates.length
+      ? candidates[0]
+      : null;
+
+
+  console.log(
+    'Furniture candidates:',
+    candidates.map(
+      c => ({
+        name:c.root.name,
+        score:c.score,
+        size:c.info.size,
+        center:c.info.center
+      })
+    )
+  );
+
+
+  // ==========================================================
+  // HIDE TARGET FURNITURE
+  // ==========================================================
+
+  if(
+    targetFurniture
+  ){
+
+    /*
+      পুরো root hide হবে।
+      তাই শুধু drawer-এর ছোট mesh না,
+      পুরো cabinet/console চলে যাবে।
+    */
+
+    hideObject(
+      targetFurniture.root
+    );
+
+  }
+
+
+  // ==========================================================
+  // HIDE DOORS
+  // ==========================================================
+
+  for(
+    const root of doorRoots.values()
+  ){
+
+    hideObject(root);
+
+  }
+
+
+  // ==========================================================
+  // HIDE TV
+  // ==========================================================
+
+  for(
+    const root of tvRoots.values()
+  ){
+
+    hideObject(root);
+
+  }
+
+
+  // ==========================================================
+  // HIDE WALL DECOR
+  // ==========================================================
+
+  for(
+    const root of decorRoots.values()
+  ){
+
+    hideObject(root);
+
+  }
+
+
+  // ==========================================================
+  // TARGET POSITION
+  // ==========================================================
+
+  let targetBox;
+
+  let targetCenter;
+
+
+  if(
+    targetFurniture
+  ){
+
+    targetBox =
+      targetFurniture.info.box.clone();
+
+
+    targetCenter =
+      targetFurniture.info.center.clone();
+
+  }else{
+
+    /*
+      Fallback:
+      room center নয়।
+
+      Back wall-এর দিকে fallback।
+    */
+
+    targetCenter =
+      V(
+        roomCenter.x,
+        floorY,
+        roomBox.min.z +
+        roomSize.z * 0.22
+      );
+
+    targetBox =
+      new THREE.Box3()
+        .setFromCenterAndSize(
+          targetCenter.clone(),
+          V(
+            roomSize.x * 0.35,
+            0.8,
+            roomSize.z * 0.20
+          )
+        );
+
+  }
+
+
+  // ==========================================================
+  // FIND WALL SIDE
+  // ==========================================================
+  //
+  // Target furniture-এর সবচেয়ে কাছের room wall বের করা।
+  //
+  // তারপর table wall-এর দিকে খুব কাছে না গিয়ে
+  // logical distance-এ বসবে।
+  // ==========================================================
+
+  const distances = {
+
+    left:
+      Math.abs(
+        targetCenter.x -
+        roomBox.min.x
+      ),
+
+    right:
+      Math.abs(
+        roomBox.max.x -
+        targetCenter.x
+      ),
+
+    back:
+      Math.abs(
+        targetCenter.z -
+        roomBox.min.z
+      ),
+
+    front:
+      Math.abs(
+        roomBox.max.z -
+        targetCenter.z
+      )
+
+  };
+
+
+  let wallSide =
+    Object.entries(
+      distances
+    ).sort(
+      (a,b) =>
+        a[1] -
+        b[1]
+    )[0][0];
+
+
+  /*
+    Screenshot-এর setup back wall-এর দিকে হওয়ায়
+    tie হলে back prefer করা হবে।
   */
 
-  const setupYaw = 0;
+  const wallDirections = {
+
+    left:
+      V(-1,0,0),
+
+    right:
+      V(1,0,0),
+
+    back:
+      V(0,0,-1),
+
+    front:
+      V(0,0,1)
+
+  };
+
+
+  let wallDir =
+    wallDirections[
+      wallSide
+    ];
 
 
   // ==========================================================
-  // TABLE
+  // SETUP CENTER
   // ==========================================================
+  //
+  // Furniture যেখানেই থাকুক,
+  // table তার জায়গার কাছাকাছি থাকবে।
+  //
+  // wall থেকে ছোট gap।
+  // ==========================================================
+
+  const setup =
+    targetCenter.clone();
+
+
+  setup.y =
+    floorY;
+
+
+  // Push setup slightly away from wall
+  if(
+    wallSide === 'left'
+  ){
+
+    setup.x =
+      roomBox.min.x +
+      Math.max(
+        0.65,
+        targetBox.getSize(V()).x * 0.55
+      );
+
+  }
+
+
+  if(
+    wallSide === 'right'
+  ){
+
+    setup.x =
+      roomBox.max.x -
+      Math.max(
+        0.65,
+        targetBox.getSize(V()).x * 0.55
+      );
+
+  }
+
+
+  if(
+    wallSide === 'back'
+  ){
+
+    setup.z =
+      roomBox.min.z +
+      Math.max(
+        0.65,
+        targetBox.getSize(V()).z * 0.55
+      );
+
+  }
+
+
+  if(
+    wallSide === 'front'
+  ){
+
+    setup.z =
+      roomBox.max.z -
+      Math.max(
+        0.65,
+        targetBox.getSize(V()).z * 0.55
+      );
+
+  }
+
+
+  // ==========================================================
+  // TABLE ORIENTATION
+  // ==========================================================
+  //
+  // Table-এর back side wall-এর দিকে।
+  // Table-এর front room-এর দিকে।
+  // ==========================================================
+
+  let tableYaw;
+
+
+  if(
+    wallSide === 'back'
+  ){
+
+    tableYaw = 0;
+
+  }else if(
+    wallSide === 'front'
+  ){
+
+    tableYaw = Math.PI;
+
+  }else if(
+    wallSide === 'left'
+  ){
+
+    tableYaw = Math.PI / 2;
+
+  }else{
+
+    tableYaw = -Math.PI / 2;
+
+  }
+
 
   table.rotation.set(
     0,
-    setupYaw +
-    rad(CFG.tableYaw),
+    tableYaw,
     0
   );
 
@@ -718,10 +1255,15 @@ try{
   );
 
 
-  table.updateMatrixWorld(true);
+  table.updateMatrixWorld(
+    true
+  );
 
 
-  // Make table touch floor
+  // ==========================================================
+  // MAKE TABLE TOUCH FLOOR
+  // ==========================================================
+
   let tableBox =
     box(table);
 
@@ -731,7 +1273,9 @@ try{
     tableBox.min.y;
 
 
-  table.updateMatrixWorld(true);
+  table.updateMatrixWorld(
+    true
+  );
 
 
   tableBox =
@@ -739,24 +1283,117 @@ try{
 
 
   // ==========================================================
-  // LAPTOP
+  // LAPTOP ORIENTATION
   // ==========================================================
   //
-  // VERY IMPORTANT:
+  // Laptop-এর local orientation inspect করা হবে।
   //
-  // Laptop-এর rotation শুধু Y axis-এ হবে।
-  // X/Z rotation একদম ZERO।
+  // X/Z tilt কখনো দেওয়া হবে না।
+  // শুধু Y rotation।
   //
-  // তাই laptop কাত হবে না।
+  // table-এর long axis অনুযায়ী straight রাখা হবে।
   // ==========================================================
 
   laptop.rotation.set(
     0,
-    setupYaw +
-    rad(CFG.laptopYaw),
+    tableYaw,
     0
   );
 
+
+  laptop.updateMatrixWorld(
+    true
+  );
+
+
+  /*
+    Laptop model যদি sideways থাকে,
+    তার bounding box table-এর সাথে compare করা হবে।
+  */
+
+
+  const laptopBox =
+    box(laptop);
+
+
+  const laptopSize =
+    laptopBox.getSize(V());
+
+
+  const tableSize =
+    tableBox.getSize(V());
+
+
+  /*
+    Laptop-এর longer horizontal dimension
+    table-এর longer dimension-এর same direction-এ
+    রাখব।
+  */
+
+  const tableLong =
+    Math.max(
+      tableSize.x,
+      tableSize.z
+    );
+
+
+  const laptopLong =
+    Math.max(
+      laptopSize.x,
+      laptopSize.z
+    );
+
+
+  if(
+    tableSize.x >
+    tableSize.z
+  ){
+
+    /*
+      Table long axis X
+    */
+
+    if(
+      laptopSize.z >
+      laptopSize.x
+    ){
+
+      laptop.rotation.y +=
+        Math.PI / 2;
+
+    }
+
+  }else{
+
+    /*
+      Table long axis Z
+    */
+
+    if(
+      laptopSize.x >
+      laptopSize.z
+    ){
+
+      laptop.rotation.y +=
+        Math.PI / 2;
+
+    }
+
+  }
+
+
+  // IMPORTANT:
+  // X/Z rotation = ZERO
+  laptop.rotation.x =
+    0;
+
+  laptop.rotation.z =
+    0;
+
+
+  // ==========================================================
+  // LAPTOP CENTER
+  // ==========================================================
 
   laptop.position.set(
     setup.x,
@@ -765,59 +1402,82 @@ try{
   );
 
 
-  laptop.updateMatrixWorld(true);
+  laptop.updateMatrixWorld(
+    true
+  );
 
 
   // ==========================================================
   // CHAIR
   // ==========================================================
+  //
+  // Chair table-এর front side-এ।
+  // Chair table-এর দিকে face করবে।
+  // ==========================================================
 
   chair.rotation.set(
     0,
-    setupYaw +
-    Math.PI +
-    rad(CFG.chairYaw),
+    tableYaw + Math.PI,
     0
   );
 
 
-  chair.updateMatrixWorld(true);
-
-
-  const chairBox0 =
-    box(chair);
-
-
-  const tableSize =
-    tableBox.getSize(V());
+  chair.updateMatrixWorld(
+    true
+  );
 
 
   const chairSize =
-    chairBox0.getSize(V());
+    box(chair).getSize(V());
 
 
   /*
-    Chair table-এর সামনে।
+    Table-এর front direction
   */
 
+  const frontDir =
+    V(
+      -wallDir.x,
+      0,
+      -wallDir.z
+    );
+
+
+  const tableDepth =
+    Math.min(
+      tableSize.x,
+      tableSize.z
+    );
+
+
   const chairDistance =
-    tableSize.z / 2 +
-    chairSize.z / 2 -
-    0.08;
+    tableDepth / 2 +
+    chairSize.z / 2 +
+    CFG.chairGap;
 
 
   chair.position.set(
-    setup.x,
+    setup.x +
+    frontDir.x *
+    chairDistance,
+
     floorY,
+
     setup.z +
+    frontDir.z *
     chairDistance
   );
 
 
-  chair.updateMatrixWorld(true);
+  chair.updateMatrixWorld(
+    true
+  );
 
 
-  // Chair floor correction
+  // ==========================================================
+  // CHAIR FLOOR
+  // ==========================================================
+
   let chairBox =
     box(chair);
 
@@ -827,11 +1487,13 @@ try{
     chairBox.min.y;
 
 
-  chair.updateMatrixWorld(true);
+  chair.updateMatrixWorld(
+    true
+  );
 
 
   // ==========================================================
-  // FINAL LAPTOP POSITION AFTER TABLE FIX
+  // FINAL LAPTOP HEIGHT
   // ==========================================================
 
   tableBox =
@@ -839,34 +1501,52 @@ try{
 
 
   laptop.position.y =
-    tableBox.max.y + 0.015;
+    tableBox.max.y +
+    0.015;
 
 
-  laptop.updateMatrixWorld(true);
+  laptop.updateMatrixWorld(
+    true
+  );
 
 
   // ==========================================================
   // CAMERA
   // ==========================================================
 
-  controls.target.set(
-    setup.x,
-    floorY + 0.9,
-    setup.z
+  const cameraTarget =
+    V(
+      setup.x,
+      floorY + 0.9,
+      setup.z
+    );
+
+
+  controls.target.copy(
+    cameraTarget
   );
 
 
   camera.position.set(
-    setup.x + 2.7,
-    floorY + 1.75,
-    setup.z + 2.7
+    setup.x +
+    frontDir.x *
+    CFG.cameraDistance +
+    wallDir.x *
+    1.0,
+
+    floorY +
+    CFG.cameraHeight,
+
+    setup.z +
+    frontDir.z *
+    CFG.cameraDistance +
+    wallDir.z *
+    1.0
   );
 
 
   camera.lookAt(
-    setup.x,
-    floorY + 0.9,
-    setup.z
+    cameraTarget
   );
 
 
@@ -874,21 +1554,35 @@ try{
   // STATUS
   // ==========================================================
 
-  st(
-    'Ready · unwanted furniture removed · laptop straight · hidden: ' +
-    hiddenNames.length
+  status(
+    'Ready · drawer/cabinet removed · setup placed in its position · laptop straight · hidden: ' +
+    hiddenStack.length
   );
 
 
   console.log(
-    'Hidden objects:',
-    hiddenNames
+    'Target furniture:',
+    targetFurniture?.root?.name
   );
 
+  console.log(
+    'Target position:',
+    targetCenter
+  );
+
+  console.log(
+    'Wall side:',
+    wallSide
+  );
 
   console.log(
     'Setup:',
     setup
+  );
+
+  console.log(
+    'Laptop rotation:',
+    laptop.rotation.y
   );
 
 
@@ -896,15 +1590,15 @@ try{
   // REMOVE MODE
   // ==========================================================
 
-  let pick = false;
+  let removeMode =
+    false;
 
-  let pointerDown =
+  let pointerStart =
     [0,0];
 
 
-  const ray =
+  const raycaster =
     new THREE.Raycaster();
-
 
   const mouse =
     new THREE.Vector2();
@@ -922,49 +1616,45 @@ try{
         event.key.toLowerCase();
 
 
-      // ------------------------------------------------------
       // H
-      // ------------------------------------------------------
+      if(
+        key === 'h'
+      ){
 
-      if(key === 'h'){
-
-        pick =
-          !pick;
+        removeMode =
+          !removeMode;
 
 
-        cv.style.cursor =
-          pick
+        canvas.style.cursor =
+          removeMode
             ? 'crosshair'
             : '';
 
 
-        st(
-          pick
-            ? 'Remove-mode ON: object-e click koro'
+        status(
+          removeMode
+            ? 'Remove-mode ON · object-e click koro'
             : 'Remove-mode OFF'
         );
 
       }
 
 
-      // ------------------------------------------------------
       // Z
-      // ------------------------------------------------------
-
       if(
         key === 'z' &&
-        stack.length
+        hiddenStack.length
       ){
 
         const object =
-          stack.pop();
+          hiddenStack.pop();
 
 
         object.visible =
           true;
 
 
-        st(
+        status(
           'Undo: ' +
           (
             object.name ||
@@ -982,11 +1672,11 @@ try{
   // POINTER DOWN
   // ==========================================================
 
-  cv.addEventListener(
+  canvas.addEventListener(
     'pointerdown',
     event => {
 
-      pointerDown = [
+      pointerStart = [
         event.clientX,
         event.clientY
       ];
@@ -999,11 +1689,11 @@ try{
   // POINTER UP
   // ==========================================================
 
-  cv.addEventListener(
+  canvas.addEventListener(
     'pointerup',
     event => {
 
-      if(!pick)
+      if(!removeMode)
         return;
 
 
@@ -1011,20 +1701,25 @@ try{
         Math.hypot(
 
           event.clientX -
-          pointerDown[0],
+          pointerStart[0],
 
           event.clientY -
-          pointerDown[1]
+          pointerStart[1]
 
         );
 
 
-      if(movement > 4)
+      if(
+        movement > 4
+      ){
+
         return;
+
+      }
 
 
       const rect =
-        cv.getBoundingClientRect();
+        canvas.getBoundingClientRect();
 
 
       mouse.set(
@@ -1048,14 +1743,14 @@ try{
       );
 
 
-      ray.setFromCamera(
+      raycaster.setFromCamera(
         mouse,
         camera
       );
 
 
       const hits =
-        ray.intersectObject(
+        raycaster.intersectObject(
           room,
           true
         );
@@ -1078,22 +1773,22 @@ try{
         hit.object;
 
 
-      hideObj(object);
+      hideObject(
+        object
+      );
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // SHIFT + CLICK
-      // ======================================================
+      // ------------------------------------------------------
 
-      if(event.shiftKey){
+      if(
+        event.shiftKey
+      ){
 
         const point =
           hit.point;
 
-
-        // -----------------------------------------------
-        // Move table
-        // -----------------------------------------------
 
         table.position.x =
           point.x;
@@ -1109,10 +1804,6 @@ try{
           true
         );
 
-
-        // -----------------------------------------------
-        // Keep table on floor
-        // -----------------------------------------------
 
         let tb =
           box(table);
@@ -1132,10 +1823,6 @@ try{
           box(table);
 
 
-        // -----------------------------------------------
-        // Laptop
-        // -----------------------------------------------
-
         laptop.position.set(
           point.x,
           tb.max.y + 0.015,
@@ -1143,12 +1830,11 @@ try{
         );
 
 
-        laptop.rotation.set(
-          0,
-          setupYaw +
-          rad(CFG.laptopYaw),
-          0
-        );
+        laptop.rotation.x =
+          0;
+
+        laptop.rotation.z =
+          0;
 
 
         laptop.updateMatrixWorld(
@@ -1156,37 +1842,33 @@ try{
         );
 
 
-        // -----------------------------------------------
-        // Chair
-        // -----------------------------------------------
+        const cs =
+          box(chair).getSize(V());
+
 
         const ts =
           tb.getSize(V());
 
 
-        const cs =
-          box(chair).getSize(V());
-
-
         const distance =
-          ts.z / 2 +
-          cs.z / 2 -
-          0.08;
+          Math.min(
+            ts.x,
+            ts.z
+          ) / 2 +
+          cs.z / 2 +
+          CFG.chairGap;
 
 
         chair.position.set(
-          point.x,
+          point.x +
+          frontDir.x *
+          distance,
+
           floorY,
-          point.z + distance
-        );
 
-
-        chair.rotation.set(
-          0,
-          setupYaw +
-          Math.PI +
-          rad(CFG.chairYaw),
-          0
+          point.z +
+          frontDir.z *
+          distance
         );
 
 
@@ -1209,13 +1891,13 @@ try{
         );
 
 
-        st(
-          'Laptop setup moved + straightened'
+        status(
+          'Setup moved · laptop straight'
         );
 
       }else{
 
-        st(
+        status(
           'Hidden: ' +
           (
             object.name ||
@@ -1255,7 +1937,7 @@ try{
   );
 
 
-  st(
+  status(
     'Error: ' +
     error.message
   );
