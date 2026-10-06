@@ -16,7 +16,7 @@ canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;display:b
 </head>
 <body>
 <div id="hud"><b>BLAXCY Room</b> · <span id="res"></span><br><span id="st">Loading…</span><br>
-<small>Drag: rotate · Scroll: zoom · H: remove-mode · Shift+click: move setup · R: rotate setup · Z: undo · [ ] exposure · - = red light</small></div>
+<small>Drag: rotate · Scroll: zoom · H: remove-mode · Shift+click: move setup · R: rotate setup · Z: undo · [ ] exposure · - = red · 9 0 white</small></div>
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -38,7 +38,7 @@ const CFG={
   roomHeight:2.8,tableHeight:.74,chairHeight:1.15,laptopWidth:.6,
   wallGap:.10,chairGap:.06,laptopEdge:.10,
   furniture:/drawer|dresser|cabinet|console|sideboard|commode|credenza|cupboard|chest|tv[\s_-]*(stand|unit|table)/i,
-  supersample:1.25,maxWidth:2560,shadowMap:2048,exposure:1,env:.3,
+  supersample:1.25,maxWidth:2560,shadowMap:2048,exposure:1,env:.22,
   white:0xfff4ea,maroon:0x9a0f26,red:0xff1a30
 };
 const MAPS=['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap'];
@@ -69,21 +69,22 @@ controls.enableDamping=true;controls.minDistance=.5;controls.maxDistance=8;contr
 /* ===== LIGHTING: white key + fill, maroon accents ===== */
 RectAreaLightUniformsLib.init();
 {const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;pm.dispose();}
-const key=new THREE.SpotLight(CFG.white,45,0,.62,.9,2),fill=new THREE.RectAreaLight(0xffffff,4,1.6,1),
-  wash=new THREE.RectAreaLight(CFG.maroon,1.6,1.4,.25),accent=new THREE.PointLight(CFG.maroon,2.2,4,2),
-  lamp=new THREE.PointLight(CFG.white,5,0,2),ringArea=new THREE.RectAreaLight(0xffe2c8,3,1,1),ringRed=new THREE.PointLight(CFG.red,0,6,2),lampRed=new THREE.PointLight(CFG.red,0,3.5,2);
+const key=new THREE.SpotLight(CFG.white,28,0,.62,.9,2),fill=new THREE.RectAreaLight(0xffffff,1.6,1.6,1),
+  wash=new THREE.RectAreaLight(CFG.maroon,2.2,1.4,.25),accent=new THREE.PointLight(CFG.maroon,2.6,4,2),
+  lamp=new THREE.PointLight(CFG.white,2,0,2),ringArea=new THREE.RectAreaLight(0xffe2c8,1.2,1,1),ringRed=new THREE.PointLight(CFG.red,0,6,2),lampRed=new THREE.PointLight(CFG.red,0,3.5,2);
 key.castShadow=true;key.shadow.mapSize.set(CFG.shadowMap,CFG.shadowMap);
 key.shadow.bias=-2e-4;key.shadow.normalBias=.02;key.shadow.camera.near=.4;key.shadow.camera.far=9;
-scene.add(new THREE.HemisphereLight(0xdfe3ff,0x3a0d14,.35),ringArea,key,key.target,fill,wash,accent,lamp,ringRed,lampRed);
-const mood={red:1,exp:CFG.exposure},reds=[wash,accent,ringRed,lampRed],glows=[]; // runtime-tunable red accent amount + exposure
-reds.forEach(l=>{l.userData.base=l.intensity;});
+const hemi=new THREE.HemisphereLight(0xdfe3ff,0x3a0d14,.22);
+scene.add(hemi,ringArea,key,key.target,fill,wash,accent,lamp,ringRed,lampRed);
+const mood={red:1,white:1,exp:CFG.exposure},reds=[wash,accent,ringRed,lampRed],whites=[hemi,key,fill,lamp,ringArea],glows=[]; // runtime-tunable red / white amount + exposure
+reds.concat(whites).forEach(l=>{l.userData.base=l.intensity;});
 const setRed=(l,v)=>{l.userData.base=v;l.intensity=v*mood.red;};
-const applyMood=()=>{reds.forEach(l=>{l.intensity=l.userData.base*mood.red;});glows.forEach(m=>{m.emissiveIntensity=m.userData.base*mood.red;});renderer.toneMappingExposure=mood.exp;};
+const applyMood=()=>{reds.forEach(l=>{l.intensity=l.userData.base*mood.red;});whites.forEach(l=>{l.intensity=l.userData.base*mood.white;});glows.forEach(m=>{m.emissiveIntensity=m.userData.base*mood.red;});renderer.toneMappingExposure=mood.exp;};
 
 /* ===== POST: multisampled HDR chain -> subtle bloom -> vignette -> ACES output ===== */
 composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(4,4,{type:THREE.HalfFloatType,samples:4}));
 composer.addPass(new RenderPass(scene,camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(4,4),.5,.55,1));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(4,4),.3,.5,1.2));
 {const v=new ShaderPass(VignetteShader);v.uniforms.offset.value=.9;v.uniforms.darkness.value=.75;composer.addPass(v);}
 composer.addPass(new OutputPass());fit();
 
@@ -211,17 +212,18 @@ function fixtures(cl){ // red light is placed where the room's own red fixtures 
     if(up>.7*S.y&&w>.12*S.y&&w<.6*S.y&&(!rg||w>wd(rg)))rg=c;});                    // hangs from the ceiling = ceiling fixture
   if(lp){const sh=new THREE.Box3();lp.list.forEach(i=>{if([].concat(i.o.material).some(isRed))sh.union(i.b);});
     if(sh.isEmpty())sh.set(V(lp.b.min.x,lp.b.max.y-.25*sz(lp).y,lp.b.min.z),lp.b.max);
-    lampRed.position.copy(sh.getCenter(V()));setRed(lampRed,3.5);glow(lp,.9);}
+    lampRed.position.copy(sh.getCenter(V()));setRed(lampRed,2.6);glow(lp,.9);}
   const rc=rg?rg.b.getCenter(V()):roomC.clone(),ry=rg?rg.b.min.y:R.min.y+.95*S.y;
-  ringRed.position.set(rc.x,ry,rc.z);setRed(ringRed,10);lamp.position.set(rc.x,ry-.2,rc.z);ringArea.position.set(rc.x,ry-.05,rc.z);ringArea.lookAt(rc.x,0,rc.z);if(rg)glow(rg,1.2);
+  ringRed.position.set(rc.x,ry,rc.z);setRed(ringRed,9);lamp.position.set(rc.x,ry-.2,rc.z);ringArea.position.set(rc.x,ry-.05,rc.z);ringArea.lookAt(rc.x,0,rc.z);if(rg)glow(rg,1.2);
 }
 
-function coves(){ // soft white cove washes at the ceiling edge: walls fade from bright (top) to dark (bottom) like the reference
-  const o=V(roomC.x,R.min.y+1.4,roomC.z),D=[V(1,0,0),V(-1,0,0),V(0,0,1),V(0,0,-1),V(0,1,0)];
+function coves(){ // ceiling-edge washes: red on the desk wall + opposite wall, weak white on the side walls (walls fade bright -> dark)
+  const o=V(roomC.x,R.min.y+1.4,roomC.z),D=[V(1,0,0),V(-1,0,0),V(0,0,1),V(0,0,-1),V(0,1,0)],t=setup.rotation.y,n=V(Math.sin(t),0,Math.cos(t));
   const d=D.map(v=>{const a=[];for(const k of[-1,-.5,0,.5,1]){const p=o.clone();p.x+=Math.abs(v.z)*k;p.z+=Math.abs(v.x)*k;ray.set(p,v);
     const h=ray.intersectObject(room,true).find(h=>vis(h.object));if(h)a.push(h.distance);}return a.sort((x,y)=>x-y)[a.length>>1]||0;}); // true inner wall distances
   const top=o.y+d[4]-.2;
-  D.slice(0,4).forEach((v,i)=>{if(!d[i]||!d[4])return;const l=new THREE.RectAreaLight(0xe6ebff,.9,(i<2?d[2]+d[3]:d[0]+d[1])*.8,.14);
+  D.slice(0,4).forEach((v,i)=>{if(!d[i]||!d[4])return;const red=Math.abs(v.dot(n))>.5,I=red?.8:.3,
+    l=new THREE.RectAreaLight(red?CFG.red:0xe6ebff,I,(i<2?d[2]+d[3]:d[0]+d[1])*.8,.14);l.userData.base=I;(red?reds:whites).push(l);
     l.position.set(o.x+v.x*(d[i]-.3),top,o.z+v.z*(d[i]-.3));l.lookAt(o.x+v.x*d[i],top-.5,o.z+v.z*d[i]);scene.add(l);});
 }
 
@@ -300,6 +302,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();
   else if(k==='z'&&undo.length){undo.pop().forEach(o=>o.visible=true);dirty();note='undo';status();}
   else if(k==='['||k===']'){mood.exp*=k===']'?1.1:.9;applyMood();note='exposure '+mood.exp.toFixed(2);status();}
   else if(k==='-'||k==='='){mood.red*=k==='='?1.25:.8;applyMood();note='red light x'+mood.red.toFixed(2);status();}
+  else if(k==='9'||k==='0'){mood.white*=k==='0'?1.25:.8;applyMood();note='white light x'+mood.white.toFixed(2);status();}
   else if(k==='r'&&placed){setup.rotation.y+=Math.PI/2;moved();}});
 
 /* ===== MAIN ===== */
@@ -312,10 +315,11 @@ try{
   [[desk],[chair,dark],[laptop]].forEach(([g,fn])=>{if(g){setup.add(g);g.traverse(o=>o.isMesh&&tune(o,true,fn));}});
   const found=detect(),cl=cluster(.004),tv=findTV(cl);
   tv.forEach(l=>{l.forEach(o=>{o.visible=false;});undo.push(l);});extra=tv.length?' · TV removed':'';
-  fixtures(cl);coves();
+  fixtures(cl);
   if(found)removeUnit(found.list.map(i=>i.o));
   else{note='drawer not auto-detected: press H and click it (the setup goes into its spot)';
     camera.position.set(R.max.x-.6,R.min.y+1.6,R.max.z-.6);controls.target.copy(roomC);controls.update();dirty();status();}
+  coves();
 }catch(e){console.error(e);say('Error: '+e.message);}
 renderer.setAnimationLoop(()=>{controls.update();composer.render();});
 </script>
