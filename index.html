@@ -16,7 +16,7 @@ canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;display:b
 </head>
 <body>
 <div id="hud"><b>BLAXCY Room</b> · <span id="res"></span><br><span id="st">Loading…</span><br>
-<small>Drag: rotate · Scroll: zoom · H: remove-mode · Shift+click: move setup · R: rotate setup · Z: undo</small></div>
+<small>Drag: rotate · Scroll: zoom · H: remove-mode · Shift+click: move setup · R: rotate setup · Z: undo · [ ] exposure · - = red light</small></div>
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -32,8 +32,8 @@ const CFG={
   roomHeight:2.8,tableHeight:.74,chairHeight:1.15,laptopWidth:.6,
   wallGap:.10,chairGap:.06,laptopEdge:.10,
   furniture:/drawer|dresser|cabinet|console|sideboard|commode|credenza|cupboard|chest|tv[\s_-]*(stand|unit|table)/i,
-  supersample:1.5,maxWidth:2560,shadowMap:2048,exposure:1,env:.5,
-  white:0xfff4ea,maroon:0x9a0f26
+  supersample:1.5,maxWidth:2560,shadowMap:2048,exposure:1,env:.3,
+  white:0xfff4ea,maroon:0x9a0f26,red:0xff1a30
 };
 const MAPS=['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap'];
 const $=id=>document.getElementById(id),say=t=>$('st').textContent=t;
@@ -64,10 +64,14 @@ RectAreaLightUniformsLib.init();
 {const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;pm.dispose();}
 const key=new THREE.SpotLight(CFG.white,45,0,.62,.9,2),fill=new THREE.RectAreaLight(0xffffff,4,1.6,1),
   wash=new THREE.RectAreaLight(CFG.maroon,1.6,1.4,.25),accent=new THREE.PointLight(CFG.maroon,2.2,4,2),
-  lamp=new THREE.PointLight(CFG.white,14,0,2);
+  lamp=new THREE.PointLight(CFG.white,8,0,2),ringRed=new THREE.PointLight(CFG.red,0,6,2),lampRed=new THREE.PointLight(CFG.red,0,3.5,2);
 key.castShadow=true;key.shadow.mapSize.set(CFG.shadowMap,CFG.shadowMap);
 key.shadow.bias=-2e-4;key.shadow.normalBias=.02;key.shadow.camera.near=.4;key.shadow.camera.far=9;
-scene.add(new THREE.HemisphereLight(CFG.white,0x3a0d14,.55),key,key.target,fill,wash,accent,lamp);
+scene.add(new THREE.HemisphereLight(CFG.white,0x3a0d14,.3),key,key.target,fill,wash,accent,lamp,ringRed,lampRed);
+const mood={red:1,exp:CFG.exposure},reds=[wash,accent,ringRed,lampRed],glows=[]; // runtime-tunable red accent amount + exposure
+reds.forEach(l=>{l.userData.base=l.intensity;});
+const setRed=(l,v)=>{l.userData.base=v;l.intensity=v*mood.red;};
+const applyMood=()=>{reds.forEach(l=>{l.intensity=l.userData.base*mood.red;});glows.forEach(m=>{m.emissiveIntensity=m.userData.base*mood.red;});renderer.toneMappingExposure=mood.exp;};
 
 /* ===== LOADING ===== */
 const loader=new GLTFLoader()
@@ -117,14 +121,14 @@ function orientDesk(g){ // long side along X; user side = side with less table-t
 
 /* ===== STATE ===== */
 const setup=new THREE.Group(),undo=[],unitOf=new Map(),ray=new THREE.Raycaster(),pk=new THREE.Raycaster(),ptr=new THREE.Vector2();
-let room,desk,chair,laptop,R,S,roomC,parts=[],placed=false,removeMode=false,dz=.8,note='';
+let room,desk,chair,laptop,R,S,roomC,parts=[],placed=false,removeMode=false,dz=.8,note='',extra='';
 setup.visible=false;scene.add(setup);
 const NAME=CFG.furniture;
 const small=b=>{const s=b.getSize(V());return Math.max(s.x,s.z)<.55*Math.max(S.x,S.z)&&s.y<.6*S.y;}; // guard: never hide room-sized things
 const clash=()=>{const bs=[desk,chair].filter(Boolean).map(o=>box(o,true).expandByScalar(-.01));
   return parts.filter(p=>vis(p.o)&&bs.some(b=>b.intersectsBox(p.b))).length;};
 const status=()=>{const k=placed?clash():0;
-  say('Ready · '+note+' · laptop level (X/Z rot 0)'+(placed?(k?' · ⚠ '+k+' object(s) overlap the setup — Shift+click to move':' · clearance OK'):''));};
+  say('Ready · '+note+extra+' · laptop level (X/Z rot 0)'+(placed?(k?' · ⚠ '+k+' object(s) overlap the setup — Shift+click to move':' · clearance OK'):''));};
 
 /* ===== ROOM ANALYSIS: group loose meshes into physical objects (no reliance on node names) ===== */
 function analyse(){
@@ -168,6 +172,31 @@ function detect(){ // try loose -> strict contact tolerance so a neighbouring wa
   return null;
 }
 
+/* ===== TV REMOVAL + MOTIVATED LIGHT FIXTURES ===== */
+const TVRE=/(^|[^a-z])(tv|television|monitor|screen)([^a-z]|$)/i,isRed=m=>m&&m.color&&m.color.r>.3&&m.color.g<.15&&m.color.b<.15;
+function findTV(cl){ // wall-mounted flat dark panel, or a node named tv/monitor/screen hanging off the floor
+  return cl.filter(c=>{const b=c.b,s=b.getSize(V()),w=Math.max(s.x,s.z),up=b.min.y-R.min.y,
+    flat=up>.25*S.y&&Math.min(s.x,s.z)<.08*S.y&&w>.2*S.y&&w<.7*S.y&&s.y>.1*S.y&&w/s.y>1.3&&w/s.y<2.6&&
+      c.list.some(({o})=>[].concat(o.material).some(m=>m&&m.color&&m.color.r+m.color.g+m.color.b<.12));
+    return small(b)&&(flat||(up>.15*S.y&&c.list.some(({o})=>TVRE.test(o.name||'')||TVRE.test(o.parent?o.parent.name:''))));
+  }).map(c=>c.list.map(i=>i.o));
+}
+function glow(c,k){ // red parts of a fixture become emissive (materials cloned so other red furniture stays unlit)
+  c.list.forEach(({o})=>{o.material=Array.isArray(o.material)?o.material.map(x=>x.clone()):o.material.clone();
+    [].concat(o.material).forEach(m=>{if(isRed(m)&&m.emissive){m.emissive.copy(m.color);m.userData.base=k;m.emissiveIntensity=k*mood.red;glows.push(m);}});});
+}
+function fixtures(cl){ // red light is placed where the room's own red fixtures are; white comes from the middle of the ceiling fixture
+  let lp=null,rg=null;const sz=c=>c.b.getSize(V()),wd=c=>{const s=sz(c);return Math.max(s.x,s.z);};
+  cl.forEach(c=>{const s=sz(c),w=wd(c),up=c.b.min.y-R.min.y;
+    if(up<.1*S.y&&s.y>.38*S.y&&w<.2*S.y&&s.y/w>2.5&&(!lp||s.y>sz(lp).y))lp=c;      // slim, tall, on the floor = floor lamp
+    if(up>.7*S.y&&w>.12*S.y&&w<.6*S.y&&(!rg||w>wd(rg)))rg=c;});                    // hangs from the ceiling = ceiling fixture
+  if(lp){const sh=new THREE.Box3();lp.list.forEach(i=>{if([].concat(i.o.material).some(isRed))sh.union(i.b);});
+    if(sh.isEmpty())sh.set(V(lp.b.min.x,lp.b.max.y-.25*sz(lp).y,lp.b.min.z),lp.b.max);
+    lampRed.position.copy(sh.getCenter(V()));setRed(lampRed,3.5);glow(lp,.9);}
+  const rc=rg?rg.b.getCenter(V()):roomC.clone(),ry=rg?rg.b.min.y:R.min.y+.95*S.y;
+  ringRed.position.set(rc.x,ry,rc.z);setRed(ringRed,10);lamp.position.set(rc.x,ry-.2,rc.z);if(rg)glow(rg,1.2);
+}
+
 /* ===== REMOVE + PLACE ===== */
 function removeUnit(list){
   const b=new THREE.Box3();list.forEach(o=>{b.union(box(o));o.visible=false;});undo.push(list);
@@ -206,8 +235,6 @@ function placeSetup(ref){ // setup frame: origin = desk centre on the floor, +Z 
   }
   if(chair){orientChair(chair);cs=box(chair,true).getSize(V());cz=dz/2+CFG.chairGap+cs.z/2;place(chair,lx,0,cz);}
   if(desk)blob(0,0,dx*1.25,dz*1.35);if(chair)blob(lx,cz,cs.x*1.2,cs.z*1.2);
-  const led=new THREE.Mesh(new THREE.BoxGeometry(dx*.8,.025,.012),new THREE.MeshBasicMaterial({color:0xd0183f})); // maroon LED strip on the wall
-  led.position.set(0,1.5,-dz/2-CFG.wallGap+.006);setup.add(led);
   const c=rc.clone().addScaledVector(n,-rs[ax]/2).addScaledVector(n,CFG.wallGap+dz/2); // wall plane + gap + half desk depth
   setup.rotation.y=Math.atan2(n.x,n.z);setup.position.set(c.x,floorAt(c.x,c.z,ref),c.z);
   setup.updateMatrixWorld(true);rig();frameCamera();dirty();
@@ -243,6 +270,8 @@ canvas.addEventListener('pointerup',e=>{
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();
   if(k==='h'){removeMode=!removeMode;note=removeMode?'REMOVE-MODE: click furniture (Z = undo)':'remove-mode off';status();}
   else if(k==='z'&&undo.length){undo.pop().forEach(o=>o.visible=true);dirty();note='undo';status();}
+  else if(k==='['||k===']'){mood.exp*=k===']'?1.1:.9;applyMood();note='exposure '+mood.exp.toFixed(2);status();}
+  else if(k==='-'||k==='='){mood.red*=k==='='?1.25:.8;applyMood();note='red light x'+mood.red.toFixed(2);status();}
   else if(k==='r'&&placed){setup.rotation.y+=Math.PI/2;moved();}});
 
 /* ===== MAIN ===== */
@@ -253,7 +282,9 @@ try{
   desk=deskO&&fitModel(deskO,'y',CFG.tableHeight);chair=chairO&&fitModel(chairO,'y',CFG.chairHeight);laptop=laptopO&&fitModel(laptopO,'xz',CFG.laptopWidth);
   const dark=m=>{if(m.color)m.color.setHex(m.map?0x777777:0x17191d);m.roughness=.65;m.metalness=.05;};
   [[desk],[chair,dark],[laptop]].forEach(([g,fn])=>{if(g){setup.add(g);g.traverse(o=>o.isMesh&&tune(o,true,fn));}});
-  const found=detect();
+  const found=detect(),cl=cluster(.004),tv=findTV(cl);
+  tv.forEach(l=>{l.forEach(o=>{o.visible=false;});undo.push(l);});extra=tv.length?' · TV removed':'';
+  fixtures(cl);
   if(found)removeUnit(found.list.map(i=>i.o));
   else{note='drawer not auto-detected: press H and click it (the setup goes into its spot)';
     camera.position.set(R.max.x-.6,R.min.y+1.6,R.max.z-.6);controls.target.copy(roomC);controls.update();dirty();status();}
