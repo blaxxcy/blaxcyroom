@@ -97,9 +97,13 @@ const loader=new GLTFLoader()
 const load=f=>loader.loadAsync(encodeURI(f)).then(g=>g.scene).catch(e=>{console.warn('Cannot load',f,e);return null;});
 const loadG=f=>loader.loadAsync(encodeURI(f)).catch(e=>{console.warn('Cannot load',f,e);return null;});
 const fbxLoader=new FBXLoader();
-const loadAnim=async()=>{for(const f of[].concat(CFG.anim)){
-  try{if(/\.fbx$/i.test(f)){const o=await fbxLoader.loadAsync(encodeURI(f));return{scene:o,animations:o.animations};}
-    return await loader.loadAsync(encodeURI(f));}catch(e){console.warn('Cannot load',f);}}return null;};
+const loadAnim=async()=>{const why=[],h=location.hostname,r=location.pathname.split('/')[1];let names=[].concat(CFG.anim,'Angry (1).fbx','angry (1).fbx');
+  try{if(/\.github\.io$/.test(h)&&r){const j=await(await fetch('https://api.github.com/repos/'+h.split('.')[0]+'/'+r+'/contents/')).json();names=names.concat(j.map(x=>x.name).filter(n=>/angry.*\.(fbx|glb)$/i.test(n)));}}catch(e){}
+  for(const f of new Set(names)){try{const a=/\.fbx$/i.test(f)?await fbxLoader.loadAsync(encodeURI(f)):await loader.loadAsync(encodeURI(f));
+    if(a.animations&&a.animations.length)return{scene:a.scene||a,animations:a.animations};why.push(f+' has 0 animation clips');}
+    catch(e){const m=String(e&&e.message||e);if(!/404/.test(m))why.push(f+': '+m.slice(0,60));}}
+  const d=document.createElement('div');d.style.cssText='position:fixed;left:10px;bottom:10px;z-index:30;background:#000b;color:#ffd24a;padding:6px 10px;border-radius:8px;font:13px system-ui';
+  d.textContent='⚠ '+(why.join(' | ')||'Angry.fbx not found next to index.html (404)');document.body.appendChild(d);return null;};
 
 /* ===== GEOMETRY HELPERS ===== */
 const tune=(o,cast,fn)=>{o.castShadow=cast;o.receiveShadow=true;[].concat(o.material).forEach(m=>{
