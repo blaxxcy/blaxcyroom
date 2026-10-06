@@ -25,6 +25,12 @@ import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {RectAreaLightUniformsLib} from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {VignetteShader} from 'three/addons/shaders/VignetteShader.js';
 
 /* ===== CONFIG (metres; the room is normalised to roomHeight) ===== */
 const CFG={
@@ -32,7 +38,7 @@ const CFG={
   roomHeight:2.8,tableHeight:.74,chairHeight:1.15,laptopWidth:.6,
   wallGap:.10,chairGap:.06,laptopEdge:.10,
   furniture:/drawer|dresser|cabinet|console|sideboard|commode|credenza|cupboard|chest|tv[\s_-]*(stand|unit|table)/i,
-  supersample:1.5,maxWidth:2560,shadowMap:2048,exposure:1,env:.3,
+  supersample:1.25,maxWidth:2560,shadowMap:2048,exposure:1,env:.3,
   white:0xfff4ea,maroon:0x9a0f26,red:0xff1a30
 };
 const MAPS=['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap'];
@@ -49,9 +55,10 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;r
 document.body.appendChild(renderer.domElement);
 const canvas=renderer.domElement,aniso=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const dirty=()=>{renderer.shadowMap.needsUpdate=true;};
+let composer;
 function fit(){ // internal resolution = supersampled CSS size, capped (crisp AA without a fixed 2560x1440 cost)
   const w=Math.min(CFG.maxWidth,Math.round(canvas.clientWidth*Math.max(CFG.supersample,devicePixelRatio))),h=Math.round(w*9/16);
-  renderer.setSize(w,h,false);$('res').textContent=w+'×'+h;
+  renderer.setSize(w,h,false);if(composer)composer.setSize(w,h);$('res').textContent=w+'×'+h;
 }
 addEventListener('resize',fit);fit();
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x050505);
@@ -64,14 +71,21 @@ RectAreaLightUniformsLib.init();
 {const pm=new THREE.PMREMGenerator(renderer);scene.environment=pm.fromScene(new RoomEnvironment(),.04).texture;pm.dispose();}
 const key=new THREE.SpotLight(CFG.white,45,0,.62,.9,2),fill=new THREE.RectAreaLight(0xffffff,4,1.6,1),
   wash=new THREE.RectAreaLight(CFG.maroon,1.6,1.4,.25),accent=new THREE.PointLight(CFG.maroon,2.2,4,2),
-  lamp=new THREE.PointLight(CFG.white,8,0,2),ringRed=new THREE.PointLight(CFG.red,0,6,2),lampRed=new THREE.PointLight(CFG.red,0,3.5,2);
+  lamp=new THREE.PointLight(CFG.white,5,0,2),ringArea=new THREE.RectAreaLight(0xffe2c8,3,1,1),ringRed=new THREE.PointLight(CFG.red,0,6,2),lampRed=new THREE.PointLight(CFG.red,0,3.5,2);
 key.castShadow=true;key.shadow.mapSize.set(CFG.shadowMap,CFG.shadowMap);
 key.shadow.bias=-2e-4;key.shadow.normalBias=.02;key.shadow.camera.near=.4;key.shadow.camera.far=9;
-scene.add(new THREE.HemisphereLight(CFG.white,0x3a0d14,.3),key,key.target,fill,wash,accent,lamp,ringRed,lampRed);
+scene.add(new THREE.HemisphereLight(0xdfe3ff,0x3a0d14,.35),ringArea,key,key.target,fill,wash,accent,lamp,ringRed,lampRed);
 const mood={red:1,exp:CFG.exposure},reds=[wash,accent,ringRed,lampRed],glows=[]; // runtime-tunable red accent amount + exposure
 reds.forEach(l=>{l.userData.base=l.intensity;});
 const setRed=(l,v)=>{l.userData.base=v;l.intensity=v*mood.red;};
 const applyMood=()=>{reds.forEach(l=>{l.intensity=l.userData.base*mood.red;});glows.forEach(m=>{m.emissiveIntensity=m.userData.base*mood.red;});renderer.toneMappingExposure=mood.exp;};
+
+/* ===== POST: multisampled HDR chain -> subtle bloom -> vignette -> ACES output ===== */
+composer=new EffectComposer(renderer,new THREE.WebGLRenderTarget(4,4,{type:THREE.HalfFloatType,samples:4}));
+composer.addPass(new RenderPass(scene,camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(4,4),.5,.55,1));
+{const v=new ShaderPass(VignetteShader);v.uniforms.offset.value=.9;v.uniforms.darkness.value=.75;composer.addPass(v);}
+composer.addPass(new OutputPass());fit();
 
 /* ===== LOADING ===== */
 const loader=new GLTFLoader()
@@ -82,6 +96,8 @@ const load=f=>loader.loadAsync(encodeURI(f)).then(g=>g.scene).catch(e=>{console.
 /* ===== GEOMETRY HELPERS ===== */
 const tune=(o,cast,fn)=>{o.castShadow=cast;o.receiveShadow=true;[].concat(o.material).forEach(m=>{
   if(!m)return;if('envMapIntensity' in m)m.envMapIntensity=CFG.env;for(const k of MAPS)if(m[k])m[k].anisotropy=aniso;if(fn)fn(m);});};
+const own=o=>{const ms=[].concat(o.material).map(m=>m.clone());o.material=Array.isArray(o.material)?ms:ms[0];return ms;}; // private materials so shared ones stay unlit
+const glossy=m=>{if('roughness' in m){m.roughness=Math.min(m.roughness,.4);m.envMapIntensity=1.2;}};            // polished floor catches the area lights
 function fitModel(o,dim,target,precise=true){ // scale a model to a target size inside a wrapper group
   const g=new THREE.Group();g.add(o);g.updateMatrixWorld(true);
   const s=box(g,precise).getSize(V()),cur=dim==='xz'?Math.max(s.x,s.z):s[dim];
@@ -134,12 +150,15 @@ const status=()=>{const k=placed?clash():0;
 function analyse(){
   room.updateMatrixWorld(true);R=box(room);S=R.getSize(V());roomC=R.getCenter(V());
   lamp.position.set(roomC.x,R.min.y+.88*S.y,roomC.z);
-  const items=[];
+  const items=[],strips=[];
   room.traverse(o=>{if(!o.isMesh)return;const b=box(o);if(b.isEmpty())return;const s=b.getSize(V()),
     shell=s.x>.5*S.x||s.z>.5*S.z||s.y>.6*S.y;                       // walls / floor / ceiling
-    tune(o,!shell&&b.min.y<R.min.y+.7*S.y);                           // shell + hanging fixtures never cast (they'd black out the room)
+    const d3=[s.x,s.y,s.z].sort((a,b)=>a-b);
+    if(b.min.y>R.min.y+.8*S.y&&d3[0]<.04*S.y&&d3[1]<.12*S.y&&d3[2]>.15*S.x)strips.push(o);       // thin cove strips at the ceiling edge
+    tune(o,!shell&&b.min.y<R.min.y+.7*S.y,shell&&s.y<.1*S.y&&b.max.y<R.min.y+.15*S.y?glossy:null);                           // shell + hanging fixtures never cast (they'd black out the room)
     if(!shell)items.push({o,b});});
   parts=items;
+  strips.forEach(o=>own(o).forEach(m=>{if(m.emissive&&m.color.r+m.color.g+m.color.b>1.8){m.emissive.set(0xe6ebff);m.emissiveIntensity=1.6;}}));
 }
 function cluster(tol){ // merge parts whose boxes touch (within tol x room height) into one physical object
   const items=parts,P=items.map((_,i)=>i),f=i=>{while(P[i]!==i){P[i]=P[P[i]];i=P[i];}return i;},E=items.map(i=>i.b.clone().expandByScalar(tol*S.y));
@@ -181,9 +200,9 @@ function findTV(cl){ // wall-mounted flat dark panel, or a node named tv/monitor
     return small(b)&&(flat||(up>.15*S.y&&c.list.some(({o})=>TVRE.test(o.name||'')||TVRE.test(o.parent?o.parent.name:''))));
   }).map(c=>c.list.map(i=>i.o));
 }
-function glow(c,k){ // red parts of a fixture become emissive (materials cloned so other red furniture stays unlit)
-  c.list.forEach(({o})=>{o.material=Array.isArray(o.material)?o.material.map(x=>x.clone()):o.material.clone();
-    [].concat(o.material).forEach(m=>{if(isRed(m)&&m.emissive){m.emissive.copy(m.color);m.userData.base=k;m.emissiveIntensity=k*mood.red;glows.push(m);}});});
+function glow(c,k){ // red parts glow red, bright cream/white parts glow warm white
+  c.list.forEach(({o})=>own(o).forEach(m=>{if(!m.emissive)return;const r=isRed(m);
+    if(r||m.color.r+m.color.g+m.color.b>1.2){m.emissive.set(r?m.color:0xffe2c8);m.userData.base=r?k:k*1.5;m.emissiveIntensity=m.userData.base*mood.red;glows.push(m);}}));
 }
 function fixtures(cl){ // red light is placed where the room's own red fixtures are; white comes from the middle of the ceiling fixture
   let lp=null,rg=null;const sz=c=>c.b.getSize(V()),wd=c=>{const s=sz(c);return Math.max(s.x,s.z);};
@@ -194,7 +213,16 @@ function fixtures(cl){ // red light is placed where the room's own red fixtures 
     if(sh.isEmpty())sh.set(V(lp.b.min.x,lp.b.max.y-.25*sz(lp).y,lp.b.min.z),lp.b.max);
     lampRed.position.copy(sh.getCenter(V()));setRed(lampRed,3.5);glow(lp,.9);}
   const rc=rg?rg.b.getCenter(V()):roomC.clone(),ry=rg?rg.b.min.y:R.min.y+.95*S.y;
-  ringRed.position.set(rc.x,ry,rc.z);setRed(ringRed,10);lamp.position.set(rc.x,ry-.2,rc.z);if(rg)glow(rg,1.2);
+  ringRed.position.set(rc.x,ry,rc.z);setRed(ringRed,10);lamp.position.set(rc.x,ry-.2,rc.z);ringArea.position.set(rc.x,ry-.05,rc.z);ringArea.lookAt(rc.x,0,rc.z);if(rg)glow(rg,1.2);
+}
+
+function coves(){ // soft white cove washes at the ceiling edge: walls fade from bright (top) to dark (bottom) like the reference
+  const o=V(roomC.x,R.min.y+1.4,roomC.z),D=[V(1,0,0),V(-1,0,0),V(0,0,1),V(0,0,-1),V(0,1,0)];
+  const d=D.map(v=>{const a=[];for(const k of[-1,-.5,0,.5,1]){const p=o.clone();p.x+=Math.abs(v.z)*k;p.z+=Math.abs(v.x)*k;ray.set(p,v);
+    const h=ray.intersectObject(room,true).find(h=>vis(h.object));if(h)a.push(h.distance);}return a.sort((x,y)=>x-y)[a.length>>1]||0;}); // true inner wall distances
+  const top=o.y+d[4]-.2;
+  D.slice(0,4).forEach((v,i)=>{if(!d[i]||!d[4])return;const l=new THREE.RectAreaLight(0xe6ebff,.9,(i<2?d[2]+d[3]:d[0]+d[1])*.8,.14);
+    l.position.set(o.x+v.x*(d[i]-.3),top,o.z+v.z*(d[i]-.3));l.lookAt(o.x+v.x*d[i],top-.5,o.z+v.z*d[i]);scene.add(l);});
 }
 
 /* ===== REMOVE + PLACE ===== */
@@ -284,12 +312,12 @@ try{
   [[desk],[chair,dark],[laptop]].forEach(([g,fn])=>{if(g){setup.add(g);g.traverse(o=>o.isMesh&&tune(o,true,fn));}});
   const found=detect(),cl=cluster(.004),tv=findTV(cl);
   tv.forEach(l=>{l.forEach(o=>{o.visible=false;});undo.push(l);});extra=tv.length?' · TV removed':'';
-  fixtures(cl);
+  fixtures(cl);coves();
   if(found)removeUnit(found.list.map(i=>i.o));
   else{note='drawer not auto-detected: press H and click it (the setup goes into its spot)';
     camera.position.set(R.max.x-.6,R.min.y+1.6,R.max.z-.6);controls.target.copy(roomC);controls.update();dirty();status();}
 }catch(e){console.error(e);say('Error: '+e.message);}
-renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
+renderer.setAnimationLoop(()=>{controls.update();composer.render();});
 </script>
 </body>
 </html>
