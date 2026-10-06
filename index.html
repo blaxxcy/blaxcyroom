@@ -21,6 +21,7 @@ canvas{width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;height:auto;display:b
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
@@ -35,7 +36,7 @@ import {VignetteShader} from 'three/addons/shaders/VignetteShader.js';
 /* ===== CONFIG (metres; the room is normalised to roomHeight) ===== */
 const CFG={
   room:'red_room (1).glb',table:'table.glb',chair:'black_ergonomic_gaming_chair.glb',laptop:'laptop_and_mouse.glb',
-  character:'character.glb',anim:'angry.glb',charHeight:1.6,
+  character:'character.glb',anim:['Angry.fbx','angry.fbx','Angry.glb','angry.glb'],charHeight:1.6,
   roomHeight:2.8,tableHeight:.74,chairHeight:1.15,laptopWidth:.6,
   wallGap:.10,chairGap:.06,laptopEdge:.10,
   furniture:/drawer|dresser|cabinet|console|sideboard|commode|credenza|cupboard|chest|tv[\s_-]*(stand|unit|table)/i,
@@ -95,6 +96,10 @@ const loader=new GLTFLoader()
   .setMeshoptDecoder(MeshoptDecoder);
 const load=f=>loader.loadAsync(encodeURI(f)).then(g=>g.scene).catch(e=>{console.warn('Cannot load',f,e);return null;});
 const loadG=f=>loader.loadAsync(encodeURI(f)).catch(e=>{console.warn('Cannot load',f,e);return null;});
+const fbxLoader=new FBXLoader();
+const loadAnim=async()=>{for(const f of[].concat(CFG.anim)){
+  try{if(/\.fbx$/i.test(f)){const o=await fbxLoader.loadAsync(encodeURI(f));return{scene:o,animations:o.animations};}
+    return await loader.loadAsync(encodeURI(f));}catch(e){console.warn('Cannot load',f);}}return null;};
 
 /* ===== GEOMETRY HELPERS ===== */
 const tune=(o,cast,fn)=>{o.castShadow=cast;o.receiveShadow=true;[].concat(o.material).forEach(m=>{
@@ -291,7 +296,7 @@ const HKM=[[/^(hips|pelvis)$/,'hips'],[/^spine$/,'s0'],[/^(spine1|chest)$/,'s1']
   [/^(shoulder|clavicle)$/,'sh'],[/^(arm|upperarm)$/,'arm'],[/^(forearm|lowerarm)$/,'fore'],[/^hand$/,'hand'],
   [/^(upleg|upperleg|thigh)$/,'up'],[/^(leg|lowerleg|calf|shin)$/,'low'],[/^foot$/,'foot'],[/^(toebase|toes?)$/,'toe']];
 function HK(n){ // humanoid bone role from any common naming (Mixamo / VRM / Blender)
-  let s=n.toLowerCase().replace(/^(mixamorig|j_bip_|bip001_?|cc_base_|def[_-]?|org[_-]?)/,'');
+  let s=n.toLowerCase().replace(/^(mixamorig:?|j_bip_|bip001_?|cc_base_|def[_-]?|org[_-]?)/,'');
   const d=/^(left|l_)|[_.\-](l|left)$/.test(s)?'L':/^(right|r_)|[_.\-](r|right)$/.test(s)?'R':'';
   s=s.replace(/^(left|right|l_|r_|c_)|[_.\-](l|r|left|right)$/g,'').replace(/[_.\-]/g,'').replace(/0+(?=\d)/g,'')
     .replace(/^hand(?=thumb|index|middle|ring|pinky|little)/,'').replace('little','pinky');
@@ -302,7 +307,8 @@ function bake(clip,src,tgt){ // world-space retarget: angry.glb skeleton -> char
   const SB={},TB={},order=[],wq=o=>o.getWorldQuaternion(new THREE.Quaternion()),wp=o=>o.getWorldPosition(V());
   src.traverse(o=>{const k=HK(o.name||'');if(k&&!SB[k])SB[k]=o;});
   tgt.traverse(o=>{if(!o.isBone)return;order.push(o);const k=HK(o.name||'');if(k&&!TB[k])TB[k]=o;});
-  const keys=Object.keys(TB).filter(k=>SB[k]);if(keys.length<8||!TB.hips)return null;
+  const keys=Object.keys(TB).filter(k=>SB[k]);
+  if(keys.length<8||!TB.hips){const sn=[];src.traverse(o=>sn.push(o.name));console.warn('retarget: only '+keys.length+' bones matched\nanimation rig:',sn.join(', '),'\ncharacter rig:',order.map(b=>b.name).join(', '));return null;}
   src.updateMatrixWorld(true);tgt.updateMatrixWorld(true);
   const sr={},tw={},bk=new Map(),rq=new Map();
   keys.forEach(k=>{sr[k]=wq(SB[k]).invert();tw[k]=wq(TB[k]);bk.set(TB[k],k);});
@@ -335,8 +341,9 @@ function bake(clip,src,tgt){ // world-space retarget: angry.glb skeleton -> char
   return new THREE.AnimationClip(clip.name||'angry',dur,trk);
 }
 function addHero(ch,an){
-  const o=ch.scene;let clip=ch.animations[0];
-  if(an&&an.animations[0]){clip=an.animations[0];try{clip=bake(clip,an.scene,o)||clip;}catch(e){console.warn('retarget failed',e);}}
+  const o=ch.scene;let clip=ch.animations[0],bad=false;
+  if(an&&an.animations[0]){clip=an.animations[0];let c2=null;try{c2=bake(clip,an.scene,o);}catch(e){console.warn('retarget failed',e);}
+    if(c2)clip=c2;else bad=true;}
   o.traverse(m=>{if(m.isMesh){m.frustumCulled=false;tune(m,true,x=>{if('envMapIntensity' in x)x.envMapIntensity=.6;});}});
   const g=fitModel(o,'y',CFG.charHeight);g.updateMatrixWorld(true); // natural height in metres, same scale as table / chair
   const b=box(g,true),c=b.getCenter(V());g.position.set(-c.x,-b.min.y,-c.z);
@@ -344,17 +351,21 @@ function addHero(ch,an){
   const base=placed?setup.position:roomC,t=placed?setup.rotation.y:0,n=V(Math.sin(t),0,Math.cos(t)),s=V(n.z,0,-n.x),
     sd=s.dot(camera.position.clone().sub(base))>=0?1:-1,H=CFG.charHeight,
     obs=[desk,chair,laptop].filter(Boolean).map(x=>box(x,true).expandByScalar(.2)),
-    ok=(x,z)=>{if(x<R.min.x+.5||x>R.max.x-.5||z<R.min.z+.5||z>R.max.z-.5)return false;
+    ok=(x,z,need)=>{if(x<R.min.x+.5||x>R.max.x-.5||z<R.min.z+.5||z>R.max.z-.5)return false;
       const f=floorAt(x,z,R),cb=new THREE.Box3(V(x-.35,f+.08,z-.35),V(x+.35,f+H,z+.35));
+      if(need){camera.updateMatrixWorld(true); // whole body must be in view and not hidden behind the bed
+        if([f,f+H].some(y=>{const p=V(x,y,z).project(camera);return Math.abs(p.x)>.85||Math.abs(p.y)>.9||p.z>1;}))return false;
+        const q=V(x,f+.3,z).sub(camera.position),L=q.length();pk.set(camera.position,q.normalize());pk.far=L-.2;
+        const hit=pk.intersectObject(room,true).some(h=>vis(h.object));pk.far=Infinity;if(hit)return false;}
       return!obs.some(q=>q.intersectsBox(cb))&&!parts.some(p=>vis(p.o)&&p.b.max.y>f+.1&&p.b.intersectsBox(cb));};
   let sp=null,first=null;
-  find:for(const d of[1.4,1,1.9,2.4])for(const a of[-sd,sd,-1.6*sd,1.6*sd,0]){
-    const p=base.clone().addScaledVector(s,a).addScaledVector(n,d);first=first||p;if(ok(p.x,p.z)){sp=p;break find;}}
+  find:for(const need of[true,false])for(const d of[1.4,1,1.9,2.4,.7])for(const a of[-sd,sd,-1.6*sd,1.6*sd,0]){
+    const p=base.clone().addScaledVector(s,a).addScaledVector(n,d);first=first||p;if(ok(p.x,p.z,need)){sp=p;break find;}}
   sp=sp||first;
   hero.position.set(sp.x,floorAt(sp.x,sp.z,R),sp.z);hero.rotation.y=Math.atan2(camera.position.x-sp.x,camera.position.z-sp.z);
-  if(clip){mixer=new THREE.AnimationMixer(o);mixer.clipAction(clip).play();}
+  if(clip){mixer=new THREE.AnimationMixer(o);mixer.clipAction(clip).setLoop(THREE.LoopRepeat,Infinity).play();}
   renderer.shadowMap.autoUpdate=true;
-  extra+=' · character'+(clip?' · '+(clip.name||'animation'):' (no animation found)');
+  extra+=' · character'+(clip?' · '+(bad?'⚠ animation bones did not match (F12 console)':clip.name||'animation'):' (no animation found)');
 }
 
 /* ===== INTERACTION (H remove-mode, Z undo, Shift+click move, R rotate, Ctrl+click move character, C turn character) ===== */
@@ -380,7 +391,7 @@ addEventListener('keydown',e=>{const k=e.key.toLowerCase();
 
 /* ===== MAIN ===== */
 try{
-  const heroP=Promise.all([loadG(CFG.character),loadG(CFG.anim)]);
+  const heroP=Promise.all([loadG(CFG.character),loadAnim()]);
   const[roomO,deskO,chairO,laptopO]=await Promise.all([CFG.room,CFG.table,CFG.chair,CFG.laptop].map(load));
   if(!roomO)throw new Error('Room model "'+CFG.room+'" could not be loaded');
   room=fitModel(roomO,'y',CFG.roomHeight,false);scene.add(room);place(room,0,0,0,false);
