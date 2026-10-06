@@ -296,17 +296,21 @@ function frameCamera(){
 const moved=()=>{setup.updateMatrixWorld(true);rig();dirty();status();};
 
 /* ===== CHARACTER: character.glb stands in the room and plays the clip from angry.glb ===== */
-const HKM=[[/^(hips|pelvis)$/,'hips'],[/^spine$/,'s0'],[/^(spine1|chest)$/,'s1'],[/^(spine2|upperchest)$/,'s2'],[/^neck1?$/,'neck'],[/^head$/,'head'],
-  [/^(shoulder|clavicle)$/,'sh'],[/^(arm|upperarm)$/,'arm'],[/^(forearm|lowerarm)$/,'fore'],[/^hand$/,'hand'],
-  [/^(upleg|upperleg|thigh)$/,'up'],[/^(leg|lowerleg|calf|shin)$/,'low'],[/^foot$/,'foot'],[/^(toebase|toes?)$/,'toe']];
-function HK(n){ // humanoid bone role from any common naming (Mixamo / VRM / Blender)
-  let s=n.toLowerCase().replace(/^(mixamorig:?|j_bip_|bip001_?|cc_base_|def[_-]?|org[_-]?)/,'');
-  const d=/^(left|l_)|[_.\-](l|left)$/.test(s)?'L':/^(right|r_)|[_.\-](r|right)$/.test(s)?'R':'';
-  s=s.replace(/^(left|right|l_|r_|c_)|[_.\-](l|r|left|right)$/g,'').replace(/[_.\-]/g,'').replace(/0+(?=\d)/g,'')
+/*HK2*/
+const HKM=[[/^(hips|pelvis|hip|center|waist|lowerbody|センター|腰|下半身)$/,'hips'],[/^(spine|upperbody|上半身)$/,'s0'],[/^(spine1|chest|upperbody2|上半身2)$/,'s1'],[/^(spine2|upperchest|upperbody3|上半身3)$/,'s2'],
+  [/^(neck|neck1|首)$/,'neck'],[/^(head|頭)$/,'head'],[/^(shoulder|clavicle|肩)$/,'sh'],[/^(arm|upperarm|腕)$/,'arm'],[/^(forearm|lowerarm|elbow|ひじ)$/,'fore'],[/^(hand|wrist|手首)$/,'hand'],
+  [/^(upleg|upperleg|thigh|足)$/,'up'],[/^(calf|shin|lowerleg|knee|ひざ)$/,'low'],[/^(foot|ankle|足首)$/,'foot'],[/^(toebase|toes?|ball|つま先)$/,'toe']];
+function HK(n){ // humanoid bone role from Mixamo / VRM / UE / Cats / MMD (English + Japanese) / Blender names
+  let s=n.toLowerCase().replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/^(mixamorig:?|j_bip_|bip001_?|cc_base_|def[_-]?|org[_-]?)/,'');
+  const sd=/^(left|right|l|r)[_.\-]|[_.\-](l|r|left|right)$|^[左右]/.test(s),d=/^(left|l_|左)|[_.\-](l|left)$/.test(s)?'L':/^(right|r_|右)|[_.\-](r|right)$/.test(s)?'R':'';
+  s=s.replace(/^(left|right|l_|r_|c_|左|右)|[_.\-](l|r|left|right)$/g,'').replace(/[_.\-\s]/g,'').replace(/0+(?=\d)/g,'')
     .replace(/^hand(?=thumb|index|middle|ring|pinky|little)/,'').replace('little','pinky');
-  const m=HKM.find(x=>x[0].test(s));
+  const m=s==='leg'?[0,sd?'up':'low']:HKM.find(x=>x[0].test(s));
   return m?d+m[1]:d&&/^(thumb|index|middle|ring|pinky)\d$/.test(s)?d+s:null;
 }
+{const w=console.warn.bind(console);console.warn=(...a)=>{w(...a);if(/^retarget/.test(String(a[0]))){const t=document.createElement('textarea');t.readOnly=true;
+  t.value='Bone names (copy and send):\n'+a.map(x=>x&&x.stack||x).join('\n');
+  t.style.cssText='position:fixed;right:10px;bottom:10px;width:min(440px,45vw);height:210px;z-index:30;background:#000c;color:#ffd24a;border:1px solid #666;border-radius:8px;font:11px ui-monospace,monospace';document.body.appendChild(t);}};}
 function bake(clip,src,tgt){ // world-space retarget: angry.glb skeleton -> character skeleton, matched by bone role
   const SB={},TB={},order=[],wq=o=>o.getWorldQuaternion(new THREE.Quaternion()),wp=o=>o.getWorldPosition(V());
   src.traverse(o=>{const k=HK(o.name||'');if(k&&!SB[k])SB[k]=o;});
